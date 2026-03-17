@@ -161,8 +161,8 @@ class BoxZonePrimitive {
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 const SESSION_DEFS = {
-  asia:   { startH: 0,  startM: 0,  endH: 9,  endM: 0,  color: 'rgba(30,100,210,0.10)',  labelColor: 'rgba(56,140,240,0.30)',  label: 'Asia'     },
-  london: { startH: 7,  startM: 0,  endH: 16, endM: 0,  color: 'rgba(100,110,30,0.12)',  labelColor: 'rgba(170,180,40,0.28)',  label: 'London'   },
+  asia:   { startH: 0,  startM: 0,  endH: 7,  endM: 0,  color: 'rgba(30,100,210,0.10)',  labelColor: 'rgba(56,140,240,0.30)',  label: 'Asia'     },
+  london: { startH: 7,  startM: 0,  endH: 12, endM: 0,  color: 'rgba(100,110,30,0.12)',  labelColor: 'rgba(170,180,40,0.28)',  label: 'London'   },
   ny:     { startH: 12, startM: 0,  endH: 21, endM: 0,  color: 'rgba(100,110,30,0.12)',  labelColor: 'rgba(170,180,40,0.28)',  label: 'New York' },
 }
 
