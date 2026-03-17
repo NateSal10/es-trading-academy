@@ -161,9 +161,9 @@ class BoxZonePrimitive {
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 const SESSION_DEFS = {
-  asia:   { startH: 0,  startM: 0,  endH: 9,  endM: 0,  color: 'rgba(56,189,248,0.07)',  labelColor: 'rgba(56,189,248,0.4)',  label: 'Asia'   },
-  london: { startH: 7,  startM: 0,  endH: 16, endM: 0,  color: 'rgba(167,139,250,0.07)', labelColor: 'rgba(167,139,250,0.4)', label: 'London' },
-  ny:     { startH: 13, startM: 30, endH: 21, endM: 0,  color: 'rgba(74,222,128,0.06)',  labelColor: 'rgba(74,222,128,0.4)',  label: 'NY'     },
+  asia:   { startH: 0,  startM: 0,  endH: 9,  endM: 0,  color: 'rgba(30,100,210,0.10)',  labelColor: 'rgba(56,140,240,0.30)',  label: 'Asia'     },
+  london: { startH: 7,  startM: 0,  endH: 16, endM: 0,  color: 'rgba(100,110,30,0.12)',  labelColor: 'rgba(170,180,40,0.28)',  label: 'London'   },
+  ny:     { startH: 12, startM: 0,  endH: 21, endM: 0,  color: 'rgba(100,110,30,0.12)',  labelColor: 'rgba(170,180,40,0.28)',  label: 'New York' },
 }
 
 function buildSessionZones(candles, sessions) {
@@ -181,12 +181,22 @@ function buildSessionZones(candles, sessions) {
     const [y, m, d] = dayStr.split(',').map(Number)
     active.forEach(key => {
       const def = SESSION_DEFS[key]
+      const windowStart = Math.floor(Date.UTC(y, m, d, def.startH, def.startM) / 1000)
+      const windowEnd   = Math.floor(Date.UTC(y, m, d, def.endH,   def.endM)   / 1000)
+
+      // Collect actual candles inside this session window
+      const sc = candles.filter(c => c.time >= windowStart && c.time <= windowEnd)
+      if (!sc.length) return
+
+      // Use real candle timestamps — timeToCoordinate always resolves these.
+      // Avoids null coords when the session boundary falls in a data gap
+      // (e.g. NY 21:00 UTC lands exactly on the CME maintenance break).
       zones.push({
-        startTime: Math.floor(Date.UTC(y, m, d, def.startH, def.startM) / 1000),
-        endTime:   Math.floor(Date.UTC(y, m, d, def.endH,   def.endM)   / 1000),
-        color:     def.color,
-        labelColor:def.labelColor,
-        label:     def.label,
+        startTime:  sc[0].time,
+        endTime:    sc[sc.length - 1].time,
+        color:      def.color,
+        labelColor: def.labelColor,
+        label:      def.label,
       })
     })
   })
@@ -232,19 +242,24 @@ class VerticalBandRenderer {
       zones.forEach(z => {
         const x1 = ts.timeToCoordinate(z.startTime)
         const x2 = ts.timeToCoordinate(z.endTime)
-        if (x1 == null && x2 == null) return
-        const left  = Math.max(0, x1 ?? 0)
-        const right = Math.min(mediaSize.width, x2 ?? mediaSize.width)
+        if (x1 == null || x2 == null) return
+
+        const left  = Math.max(0, x1)
+        const right = Math.min(mediaSize.width, x2)
         const w = right - left
         if (w <= 0) return
 
         ctx.fillStyle = z.color
         ctx.fillRect(left, 0, w, mediaSize.height)
 
-        // Session label near top of band
+        // Large centered watermark label
         ctx.fillStyle = z.labelColor
-        ctx.font = 'bold 9px Inter, sans-serif'
-        ctx.fillText(z.label, left + 3, 12)
+        ctx.font = 'bold 42px Inter, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(z.label, left + w / 2, mediaSize.height * 0.62)
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'alphabetic'
       })
     })
   }
