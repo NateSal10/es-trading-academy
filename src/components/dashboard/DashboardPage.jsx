@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import useStore from '../../store/index'
 import SessionClock from './SessionClock'
 import useCountUp from '../../hooks/useCountUp'
+import ConsistencyChart from '../proptracker/ConsistencyChart'
 
 const todayStr = new Date().toISOString().split('T')[0]
 
@@ -165,6 +166,48 @@ function EquityCurve({ dailyPnL, startingBalance }) {
   )
 }
 
+function ResetButton({ mode }) {
+  const resetAccount      = useStore(s => s.resetAccount)
+  const resetPaperAccount = useStore(s => s.resetPaperAccount)
+  const [confirming, setConfirming] = useState(false)
+
+  const isProp = mode === 'prop'
+  const confirmMsg = isProp ? 'Reset prop account to $50K?' : 'Reset paper account?'
+
+  function handleReset() {
+    if (confirming) { isProp ? resetAccount() : resetPaperAccount(); setConfirming(false) }
+    else setConfirming(true)
+  }
+
+  if (confirming) {
+    return (
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{confirmMsg}</span>
+        <button onClick={handleReset} style={{
+          padding: '6px 14px', background: 'var(--red-bg)', border: '1px solid rgba(216,90,48,0.4)',
+          borderRadius: '6px', color: '#ef7a50', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
+        }}>Confirm Reset</button>
+        <button onClick={() => setConfirming(false)} style={{
+          padding: '6px 14px', background: 'var(--bg3)', border: '1px solid var(--border)',
+          borderRadius: '6px', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit',
+        }}>Cancel</button>
+      </div>
+    )
+  }
+
+  return (
+    <button onClick={handleReset} style={{
+      padding: '7px 16px', background: 'var(--bg3)', border: '1px solid var(--border)',
+      borderRadius: '6px', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', transition: 'color 0.15s, border-color 0.15s',
+    }}
+      onMouseEnter={e => { e.target.style.color = '#ef7a50'; e.target.style.borderColor = 'rgba(216,90,48,0.4)' }}
+      onMouseLeave={e => { e.target.style.color = 'var(--muted)'; e.target.style.borderColor = 'var(--border)' }}
+    >
+      Reset Account
+    </button>
+  )
+}
+
 function RecentTrades({ trades }) {
   const recent = trades.slice(-6).reverse()
   if (!recent.length) {
@@ -295,34 +338,37 @@ export default function DashboardPage() {
       <StatsBar items={statsBarItems} />
 
       {/* Account toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-          {[
-            { id: 'prop',  label: 'Prop Account' },
-            { id: 'paper', label: 'Paper Account' },
-          ].map(m => (
-            <button key={m.id} onClick={() => setMode(m.id)} style={{
-              padding: '7px 18px', fontSize: '12px', fontWeight: 600, border: 'none',
-              borderLeft: m.id === 'paper' ? '1px solid var(--border)' : 'none',
-              cursor: 'pointer', fontFamily: 'inherit',
-              background: mode === m.id ? (m.id === 'prop' ? 'var(--accent)' : '#7c3aed') : 'var(--bg3)',
-              color: mode === m.id ? '#fff' : 'var(--muted)',
-              transition: 'all .15s',
-            }}>
-              {m.label}
-            </button>
-          ))}
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-          {trades.length} total trade{trades.length !== 1 ? 's' : ''}
-          {trades.length > 0 && (
-            <span> · Avg {avgR}R · P&amp;L{' '}
-              <span style={{ fontWeight: 700, fontFamily: 'monospace', color: totalPnL >= 0 ? 'var(--green-bright)' : 'var(--red-bright)' }}>
-                {fmt$(totalPnL, true)}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+            {[
+              { id: 'prop',  label: 'Prop Account' },
+              { id: 'paper', label: 'Paper Account' },
+            ].map(m => (
+              <button key={m.id} onClick={() => setMode(m.id)} style={{
+                padding: '7px 18px', fontSize: '12px', fontWeight: 600, border: 'none',
+                borderLeft: m.id === 'paper' ? '1px solid var(--border)' : 'none',
+                cursor: 'pointer', fontFamily: 'inherit',
+                background: mode === m.id ? (m.id === 'prop' ? 'var(--accent)' : '#7c3aed') : 'var(--bg3)',
+                color: mode === m.id ? '#fff' : 'var(--muted)',
+                transition: 'all .15s',
+              }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+            {trades.length} total trade{trades.length !== 1 ? 's' : ''}
+            {trades.length > 0 && (
+              <span> · Avg {avgR}R · P&amp;L{' '}
+                <span style={{ fontWeight: 700, fontFamily: 'monospace', color: totalPnL >= 0 ? 'var(--green-bright)' : 'var(--red-bright)' }}>
+                  {fmt$(totalPnL, true)}
+                </span>
               </span>
-            </span>
-          )}
+            )}
+          </div>
         </div>
+        <ResetButton mode={mode} />
       </div>
 
       {/* Row 1: Clock + Equity Curve */}
@@ -373,15 +419,18 @@ export default function DashboardPage() {
 
       {/* Row 3: Risk limits (prop only) + Recent Trades */}
       {isProp ? (
-        <div className="row2">
-          <DrawdownMeter
-            todayPnL={todayPnL}
-            balance={balance}
-            peakBalance={peakBalance}
-            startingBalance={startingBal}
-          />
-          <RecentTrades trades={trades} />
-        </div>
+        <>
+          <div className="row2">
+            <DrawdownMeter
+              todayPnL={todayPnL}
+              balance={balance}
+              peakBalance={peakBalance}
+              startingBalance={startingBal}
+            />
+            <RecentTrades trades={trades} />
+          </div>
+          <ConsistencyChart />
+        </>
       ) : (
         <RecentTrades trades={trades} />
       )}
