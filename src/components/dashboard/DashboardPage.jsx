@@ -2,10 +2,6 @@ import { useState, useMemo } from 'react'
 import useStore from '../../store/index'
 import SessionClock from './SessionClock'
 import useCountUp from '../../hooks/useCountUp'
-import DrawdownMeter from '../proptracker/DrawdownMeter'
-import AccountRulesCard from '../proptracker/AccountRulesCard'
-import ConsistencyChart from '../proptracker/ConsistencyChart'
-import DailyTradesLog from '../proptracker/DailyTradesLog'
 
 const todayStr = new Date().toISOString().split('T')[0]
 
@@ -53,6 +49,68 @@ function StatCard({ label, value, sub, accentColor, mono = true }) {
         {value}
       </div>
       {sub && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '5px' }}>{sub}</div>}
+    </div>
+  )
+}
+
+function MeterBar({ label, used, limit, color }) {
+  const pct = Math.min(100, limit > 0 ? Math.round(Math.abs(used) / limit * 100) : 0)
+  const barColor = pct >= 80 ? 'var(--red-bright)' : pct >= 50 ? 'var(--amber-bright)' : color
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+        <span style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.7px', fontSize: '10px', fontWeight: 600 }}>{label}</span>
+        <span style={{ fontFamily: 'monospace', color: barColor, fontWeight: 700 }}>
+          {fmt$(Math.abs(used))} / {fmt$(limit)}
+        </span>
+      </div>
+      <div style={{ height: '6px', background: 'var(--bg3)', borderRadius: '3px', overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${pct}%`, background: barColor,
+          borderRadius: '3px', transition: 'width 0.4s ease',
+        }} />
+      </div>
+      <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px', textAlign: 'right' }}>
+        {pct}% used · {fmt$(limit - Math.abs(used))} remaining
+      </div>
+    </div>
+  )
+}
+
+function DrawdownMeter({ todayPnL, balance, peakBalance, startingBalance }) {
+  const dailyLoss = Math.min(0, todayPnL)
+  const ddFromPeak = Math.max(0, peakBalance - balance)
+  const profitGain = Math.max(0, balance - startingBalance)
+  const PROFIT_TARGET = 3000
+  const profitPct = Math.min(100, Math.round(profitGain / PROFIT_TARGET * 100))
+  const profitColor = profitPct >= 100 ? 'var(--green-bright)' : 'var(--accent)'
+
+  return (
+    <div className="card" style={{ marginBottom: 0 }}>
+      <div style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '14px', fontWeight: 600 }}>
+        Prop Risk Limits
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <MeterBar label="Daily Loss" used={dailyLoss} limit={1000} color="var(--green-bright)" />
+        <MeterBar label="Max Drawdown" used={ddFromPeak} limit={2000} color="var(--green-bright)" />
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+            <span style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.7px', fontSize: '10px', fontWeight: 600 }}>Profit Target</span>
+            <span style={{ fontFamily: 'monospace', color: profitColor, fontWeight: 700 }}>
+              {fmt$(profitGain, true)} / {fmt$(PROFIT_TARGET)}
+            </span>
+          </div>
+          <div style={{ height: '6px', background: 'var(--bg3)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', width: `${profitPct}%`,
+              background: profitColor, borderRadius: '3px', transition: 'width 0.4s ease',
+            }} />
+          </div>
+          <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px', textAlign: 'right' }}>
+            {profitPct}% · {fmt$(PROFIT_TARGET - profitGain)} to go
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -159,53 +217,6 @@ function RecentTrades({ trades }) {
   )
 }
 
-function ResetButton({ mode }) {
-  const resetAccount      = useStore(s => s.resetAccount)
-  const resetPaperAccount = useStore(s => s.resetPaperAccount)
-  const [confirming, setConfirming] = useState(false)
-
-  const isProp = mode === 'prop'
-  const confirmMsg = isProp ? 'Reset prop account to $50K?' : 'Reset paper account?'
-
-  function handleReset() {
-    if (confirming) {
-      if (isProp) resetAccount()
-      else resetPaperAccount()
-      setConfirming(false)
-    } else {
-      setConfirming(true)
-    }
-  }
-
-  if (confirming) {
-    return (
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{confirmMsg}</span>
-        <button onClick={handleReset} style={{
-          padding: '6px 14px', background: 'var(--red-bg)', border: '1px solid rgba(216,90,48,0.4)',
-          borderRadius: '6px', color: '#ef7a50', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
-        }}>Confirm Reset</button>
-        <button onClick={() => setConfirming(false)} style={{
-          padding: '6px 14px', background: 'var(--bg3)', border: '1px solid var(--border)',
-          borderRadius: '6px', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit',
-        }}>Cancel</button>
-      </div>
-    )
-  }
-
-  return (
-    <button onClick={handleReset} style={{
-      padding: '7px 16px', background: 'var(--bg3)', border: '1px solid var(--border)',
-      borderRadius: '6px', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit', transition: 'color 0.15s, border-color 0.15s',
-    }}
-      onMouseEnter={e => { e.target.style.color = '#ef7a50'; e.target.style.borderColor = 'rgba(216,90,48,0.4)' }}
-      onMouseLeave={e => { e.target.style.color = 'var(--muted)'; e.target.style.borderColor = 'var(--border)' }}
-    >
-      Reset Account
-    </button>
-  )
-}
-
 export default function DashboardPage() {
   const [mode, setMode] = useState('prop')
   const account      = useStore(s => s.account)
@@ -244,6 +255,9 @@ export default function DashboardPage() {
   const avgR        = trades.length > 0
     ? (trades.reduce((sum, t) => sum + (t.r || 0), 0) / trades.length).toFixed(1)
     : '–'
+  const tradingDays = Object.keys(dailyPnL).filter(d => dailyPnL[d] !== 0).length
+  const allDayPnLs  = Object.values(dailyPnL)
+  const bestDay     = allDayPnLs.length ? Math.max(...allDayPnLs) : 0
 
   const streak = useMemo(() => {
     if (!trades.length) return { count: 0, type: null }
@@ -265,63 +279,50 @@ export default function DashboardPage() {
   const pnlColor = todayPnL > 0 ? 'var(--green-bright)' : todayPnL < 0 ? 'var(--red-bright)' : 'var(--muted)'
   const isProp   = mode === 'prop'
 
+  // Stats bar: overall/historical summary — no overlap with the cards below
   const statsBarItems = [
-    { label: 'Mode',      value: isProp ? 'PROP' : 'PAPER',  color: isProp ? 'var(--accent)' : '#a78bfa' },
-    { label: 'Balance',   value: fmt$(balance),               color: 'var(--text)' },
-    { label: 'Today P&L', value: fmt$(todayPnL, true),        color: todayPnL > 0 ? 'var(--green-bright)' : todayPnL < 0 ? 'var(--red-bright)' : 'var(--muted)' },
-    { label: 'Total P&L', value: fmt$(totalPnL, true),        color: totalPnL > 0 ? 'var(--green-bright)' : totalPnL < 0 ? 'var(--red-bright)' : 'var(--muted)' },
-    { label: 'Win Rate',  value: `${winRate}%`,               color: winRate >= 50 ? 'var(--green-bright)' : trades.length === 0 ? 'var(--muted)' : 'var(--red-bright)' },
-    { label: 'Avg R',     value: `${avgR}R`,                  color: 'var(--accent)' },
-    { label: 'Trades',    value: String(trades.length),       color: 'var(--text)' },
+    { label: 'Account',      value: isProp ? 'PROP' : 'PAPER',           color: isProp ? 'var(--accent)' : '#a78bfa' },
+    { label: 'Total P&L',    value: fmt$(totalPnL, true),                 color: totalPnL > 0 ? 'var(--green-bright)' : totalPnL < 0 ? 'var(--red-bright)' : 'var(--muted)' },
+    { label: 'Peak Balance', value: fmt$(peakBalance),                    color: 'var(--text)' },
+    { label: 'Avg R',        value: trades.length ? `${avgR}R` : '–',    color: 'var(--accent)' },
+    { label: 'Total Trades', value: String(trades.length),                color: 'var(--text)' },
+    { label: 'Trading Days', value: String(tradingDays),                  color: 'var(--text)' },
+    { label: 'Best Day',     value: bestDay > 0 ? fmt$(bestDay, true) : '–', color: bestDay > 0 ? 'var(--green-bright)' : 'var(--muted)' },
   ]
 
   return (
     <div className="page">
       <StatsBar items={statsBarItems} />
 
-      {/* Account toggle + branding */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-            {[
-              { id: 'prop',  label: 'Prop Account' },
-              { id: 'paper', label: 'Paper Account' },
-            ].map(m => (
-              <button key={m.id} onClick={() => setMode(m.id)} style={{
-                padding: '7px 18px', fontSize: '12px', fontWeight: 600, border: 'none',
-                borderLeft: m.id === 'paper' ? '1px solid var(--border)' : 'none',
-                cursor: 'pointer', fontFamily: 'inherit',
-                background: mode === m.id ? (m.id === 'prop' ? 'var(--accent)' : '#7c3aed') : 'var(--bg3)',
-                color: mode === m.id ? '#fff' : 'var(--muted)',
-                transition: 'all .15s',
-              }}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-          {isProp && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{
-                fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '5px',
-                background: 'rgba(79,142,247,0.12)', color: 'var(--accent)',
-                border: '1px solid rgba(79,142,247,0.25)', letterSpacing: '0.4px',
-              }}>
-                Alpha Futures — Zero 50K
+      {/* Account toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+          {[
+            { id: 'prop',  label: 'Prop Account' },
+            { id: 'paper', label: 'Paper Account' },
+          ].map(m => (
+            <button key={m.id} onClick={() => setMode(m.id)} style={{
+              padding: '7px 18px', fontSize: '12px', fontWeight: 600, border: 'none',
+              borderLeft: m.id === 'paper' ? '1px solid var(--border)' : 'none',
+              cursor: 'pointer', fontFamily: 'inherit',
+              background: mode === m.id ? (m.id === 'prop' ? 'var(--accent)' : '#7c3aed') : 'var(--bg3)',
+              color: mode === m.id ? '#fff' : 'var(--muted)',
+              transition: 'all .15s',
+            }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+          {trades.length} total trade{trades.length !== 1 ? 's' : ''}
+          {trades.length > 0 && (
+            <span> · Avg {avgR}R · P&amp;L{' '}
+              <span style={{ fontWeight: 700, fontFamily: 'monospace', color: totalPnL >= 0 ? 'var(--green-bright)' : 'var(--red-bright)' }}>
+                {fmt$(totalPnL, true)}
               </span>
-              <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                {trades.length} trade{trades.length !== 1 ? 's' : ''}
-                {trades.length > 0 && <span> · Avg {avgR}R</span>}
-              </span>
-            </div>
-          )}
-          {!isProp && (
-            <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-              {trades.length} trade{trades.length !== 1 ? 's' : ''}
-              {trades.length > 0 && <span> · Avg {avgR}R</span>}
-            </div>
+            </span>
           )}
         </div>
-        <ResetButton mode={mode} />
       </div>
 
       {/* Row 1: Clock + Equity Curve */}
@@ -330,12 +331,12 @@ export default function DashboardPage() {
         <EquityCurve dailyPnL={dailyPnL} startingBalance={startingBal} />
       </div>
 
-      {/* Row 2: Stat cards */}
+      {/* Row 2: Stat cards — today's performance */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '12px' }}>
         <StatCard
           label={isProp ? 'Prop Balance' : 'Paper Balance'}
           value={fmt$(animBalance)}
-          sub={`Peak: ${fmt$(peakBalance)}`}
+          sub={isProp ? 'Alpha Futures Zero 50K' : `Starting: ${fmt$(startingBal)}`}
           accentColor={isProp ? 'var(--accent)' : '#7c3aed'}
         />
         <StatCard
@@ -370,16 +371,17 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Prop mode: full risk + rules + consistency + trade log */}
+      {/* Row 3: Risk limits (prop only) + Recent Trades */}
       {isProp ? (
-        <>
-          <div className="row2" style={{ marginBottom: '12px' }}>
-            <DrawdownMeter />
-            <AccountRulesCard />
-          </div>
-          <ConsistencyChart />
-          <DailyTradesLog />
-        </>
+        <div className="row2">
+          <DrawdownMeter
+            todayPnL={todayPnL}
+            balance={balance}
+            peakBalance={peakBalance}
+            startingBalance={startingBal}
+          />
+          <RecentTrades trades={trades} />
+        </div>
       ) : (
         <RecentTrades trades={trades} />
       )}
