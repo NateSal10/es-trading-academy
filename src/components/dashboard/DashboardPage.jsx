@@ -159,19 +159,28 @@ function RecentTrades({ trades }) {
   )
 }
 
-function ResetButton() {
-  const resetAccount = useStore(s => s.resetAccount)
+function ResetButton({ mode }) {
+  const resetAccount      = useStore(s => s.resetAccount)
+  const resetPaperAccount = useStore(s => s.resetPaperAccount)
   const [confirming, setConfirming] = useState(false)
 
+  const isProp = mode === 'prop'
+  const confirmMsg = isProp ? 'Reset prop account to $50K?' : 'Reset paper account?'
+
   function handleReset() {
-    if (confirming) { resetAccount(); setConfirming(false) }
-    else setConfirming(true)
+    if (confirming) {
+      if (isProp) resetAccount()
+      else resetPaperAccount()
+      setConfirming(false)
+    } else {
+      setConfirming(true)
+    }
   }
 
   if (confirming) {
     return (
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Reset account to $50K?</span>
+        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{confirmMsg}</span>
         <button onClick={handleReset} style={{
           padding: '6px 14px', background: 'var(--red-bg)', border: '1px solid rgba(216,90,48,0.4)',
           borderRadius: '6px', color: '#ef7a50', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'inherit',
@@ -312,7 +321,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-        {isProp && <ResetButton />}
+        <ResetButton mode={mode} />
       </div>
 
       {/* Row 1: Clock + Equity Curve */}
