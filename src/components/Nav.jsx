@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard,
   CandlestickChart,
-  TrendingUp,
   BookOpen,
   ClipboardList,
   BookText,
@@ -11,7 +10,6 @@ import {
 const TABS = [
   { id: 'dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
   { id: 'practice',    label: 'Practice',     icon: CandlestickChart },
-  { id: 'proptracker', label: 'Prop Tracker',  icon: TrendingUp },
   { id: 'concepts',    label: 'Learn',        icon: BookOpen },
   { id: 'journal',     label: 'Journal',      icon: ClipboardList },
   { id: 'glossary',    label: 'Glossary',     icon: BookText },

@@ -6,7 +6,6 @@ import DashboardPage from './components/dashboard/DashboardPage';
 import ConceptsPage from './components/concepts/ConceptsPage';
 import PracticePage from './components/practice/PracticePage';
 import JournalPage from './components/journal/JournalPage';
-import PropTrackerPage from './components/proptracker/PropTrackerPage';
 import GlossaryPage from './components/glossary/GlossaryPage';
 
 export default function App() {
@@ -23,7 +22,6 @@ export default function App() {
         <PracticePage />
       </div>
       {tab === 'journal'     && <JournalPage />}
-      {tab === 'proptracker' && <PropTrackerPage />}
       {tab === 'glossary'    && <GlossaryPage />}
     </>
   );
