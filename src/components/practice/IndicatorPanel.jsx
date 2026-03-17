@@ -1,14 +1,5 @@
 import useStore from '../../store'
 
-const INDICATORS = [
-  { key: 'vwap',   label: 'VWAP',    color: '#e8a93a' },
-  { key: 'ema9',   label: 'EMA 9',   color: '#ef7a50' },
-  { key: 'ema21',  label: 'EMA 21',  color: '#4f8ef7' },
-  { key: 'ema50',  label: 'EMA 50',  color: '#9b94e8' },
-  { key: 'rsi',    label: 'RSI (14)',color: '#9b94e8' },
-  { key: 'volume', label: 'Volume',  color: '#4f8ef7' },
-]
-
 const SMC_LAYERS = [
   { key: 'fvg', label: 'FVG Zones',    color: '#22c55e' },
   { key: 'ob',  label: 'Order Blocks', color: '#fb923c' },
@@ -53,8 +44,6 @@ function SmallToggle({ checked, onChange, color, label }) {
 }
 
 export default function IndicatorPanel() {
-  const indicators  = useStore(s => s.indicators)
-  const setIndicator = useStore(s => s.setIndicator)
   const smcLayers   = useStore(s => s.smcLayers)
   const setSMCLayer = useStore(s => s.setSMCLayer)
   const sessions    = useStore(s => s.sessions)
@@ -62,20 +51,6 @@ export default function IndicatorPanel() {
 
   return (
     <div className="side-panel">
-
-      {/* Indicators */}
-      <div className="panel-section">
-        <div className="panel-title">Indicators</div>
-        {INDICATORS.map(ind => (
-          <div key={ind.key} className="indicator-row">
-            <span className="indicator-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: ind.color, display: 'inline-block', flexShrink: 0 }} />
-              {ind.label}
-            </span>
-            <Toggle checked={indicators[ind.key]} onChange={e => setIndicator(ind.key, e.target.checked)} color={ind.color} />
-          </div>
-        ))}
-      </div>
 
       {/* SMC Overlays */}
       <div className="panel-section">

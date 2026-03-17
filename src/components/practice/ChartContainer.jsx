@@ -4,54 +4,8 @@ import {
   CrosshairMode,
   LineStyle,
   CandlestickSeries,
-  HistogramSeries,
-  LineSeries,
 } from 'lightweight-charts'
 import useStore from '../../store'
-
-// ── Indicator math ────────────────────────────────────────────────────────────
-function calcEMA(candles, period) {
-  const k = 2 / (period + 1)
-  let ema = candles[0].close
-  return candles.map((c, i) => {
-    if (i === 0) { ema = c.close; return { time: c.time, value: c.close } }
-    ema = c.close * k + ema * (1 - k)
-    return { time: c.time, value: +ema.toFixed(2) }
-  })
-}
-
-function calcVWAP(candles) {
-  let cumVP = 0, cumV = 0, lastDate = null
-  return candles.map(c => {
-    const date = new Date(c.time * 1000).toDateString()
-    if (date !== lastDate) { cumVP = 0; cumV = 0; lastDate = date }
-    const tp = (c.high + c.low + c.close) / 3
-    cumVP += tp * (c.volume || 1)
-    cumV  += (c.volume || 1)
-    return { time: c.time, value: +(cumVP / cumV).toFixed(2) }
-  })
-}
-
-function calcRSI(candles, period = 14) {
-  if (candles.length < period + 1) return []
-  let gains = 0, losses = 0
-  for (let i = 1; i <= period; i++) {
-    const d = candles[i].close - candles[i - 1].close
-    if (d > 0) gains += d; else losses -= d
-  }
-  let avgGain = gains / period, avgLoss = losses / period
-  const result = []
-  for (let i = period; i < candles.length; i++) {
-    if (i > period) {
-      const d = candles[i].close - candles[i - 1].close
-      avgGain = (avgGain * (period - 1) + Math.max(0, d)) / period
-      avgLoss = (avgLoss * (period - 1) + Math.max(0, -d)) / period
-    }
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss
-    result.push({ time: candles[i].time, value: +(100 - 100 / (1 + rs)).toFixed(2) })
-  }
-  return result
-}
 
 // ── SMC detection ─────────────────────────────────────────────────────────────
 // Detectors return ACTIVE (unmitigated/unswept) zones only.
@@ -69,13 +23,13 @@ function detectFVGs(candles) {
     const future = data.slice(i + 2)
 
     if (prev.high < next.low) {
-      // Bullish FVG: gap [prev.high → next.low]; mitigated when any future low enters the gap
-      if (!future.some(c => c.low < next.low)) {
+      // Bullish FVG: gap [prev.high → next.low]; mitigated when any future low touches or enters the gap
+      if (!future.some(c => c.low <= next.low)) {
         result.push({ type: 'bull', top: next.low, bot: prev.high, startTime: mid.time })
       }
     } else if (prev.low > next.high) {
-      // Bearish FVG: gap [next.high → prev.low]; mitigated when any future high enters the gap
-      if (!future.some(c => c.high > next.high)) {
+      // Bearish FVG: gap [next.high → prev.low]; mitigated when any future high touches or enters the gap
+      if (!future.some(c => c.high >= next.high)) {
         result.push({ type: 'bear', top: prev.low, bot: next.high, startTime: mid.time })
       }
     }
@@ -93,14 +47,14 @@ function detectOBs(candles) {
 
     const isBullImpulse = n1.close > n1.open && (n1.close - n1.open) > (n1.high - n1.low) * 0.45
     if (c.close < c.open && isBullImpulse) {
-      if (!future.some(fc => fc.low < c.low)) {
+      if (!future.some(fc => fc.low <= c.low)) {
         result.push({ type: 'bull', high: c.high, low: c.low, startTime: c.time })
       }
     }
 
     const isBearImpulse = n1.close < n1.open && (n1.open - n1.close) > (n1.high - n1.low) * 0.45
     if (c.close > c.open && isBearImpulse) {
-      if (!future.some(fc => fc.high > c.high)) {
+      if (!future.some(fc => fc.high >= c.high)) {
         result.push({ type: 'bear', high: c.high, low: c.low, startTime: c.time })
       }
     }
@@ -114,12 +68,13 @@ function detectLiquidity(candles) {
   const levels = [], w = 5
   for (let i = w; i < data.length - w; i++) {
     const win = data.slice(i - w, i + w + 1)
-    const future = data.slice(i + w + 1)
+    // Check ALL candles after the swing point for sweeps (not just outside the window)
+    const future = data.slice(i + 1)
     if (data[i].high === Math.max(...win.map(c => c.high))) {
-      if (!future.some(c => c.high > data[i].high)) levels.push({ type: 'high', price: data[i].high })
+      if (!future.some(c => c.high >= data[i].high)) levels.push({ type: 'high', price: data[i].high })
     }
     if (data[i].low === Math.min(...win.map(c => c.low))) {
-      if (!future.some(c => c.low < data[i].low)) levels.push({ type: 'low', price: data[i].low })
+      if (!future.some(c => c.low <= data[i].low)) levels.push({ type: 'low', price: data[i].low })
     }
   }
   return levels.slice(-6)
@@ -361,11 +316,8 @@ export default function ChartContainer({
   onTickPrice,          // (price: number) => void — called on each tick with simulated close
 }) {
   const mainElRef   = useRef(null)
-  const rsiElRef    = useRef(null)
   const chartRef    = useRef(null)
   const seriesRef   = useRef({})
-  const rsiChartRef = useRef(null)
-  const rsiSerRef   = useRef(null)
   const fvgPrimRef     = useRef(null)
   const obPrimRef      = useRef(null)
   const sessionPrimRef = useRef(null)
@@ -380,7 +332,6 @@ export default function ChartContainer({
   const [hoverLine, setHoverLine] = useState(null)   // 'tp' | 'sl' | null — for cursor
   const [dragDisplay, setDragDisplay] = useState(null) // { pts, dollars, y } — shown while dragging
 
-  const indicators = useStore(s => s.indicators)
   const smcLayers  = useStore(s => s.smcLayers)
   const sessions   = useStore(s => s.sessions)
 
@@ -438,45 +389,14 @@ export default function ChartContainer({
     seriesRef.current.candles.attachPrimitive(obPrimRef.current)
     seriesRef.current.candles.attachPrimitive(sessionPrimRef.current)
 
-    seriesRef.current.volume = chart.addSeries(HistogramSeries, {
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'vol',
-      color: '#4f8ef7',
-    })
-    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
-
-    seriesRef.current.ema9  = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-    seriesRef.current.ema21 = chart.addSeries(LineSeries, { color: '#4f8ef7', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-    seriesRef.current.ema50 = chart.addSeries(LineSeries, { color: '#a78bfa', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
-    seriesRef.current.vwap  = chart.addSeries(LineSeries, { color: '#fb923c', lineWidth: 1.5, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false })
-
-    // RSI pane
-    if (rsiElRef.current) {
-      const rsiChart = createChart(rsiElRef.current, {
-        ...CHART_OPTIONS,
-        width:  rsiElRef.current.clientWidth,
-        height: rsiElRef.current.clientHeight || 100,
-      })
-      rsiChartRef.current = rsiChart
-      rsiSerRef.current = rsiChart.addSeries(LineSeries, { color: '#a78bfa', lineWidth: 1.5, priceLineVisible: false })
-      chart.subscribeCrosshairMove(p => {
-        if (p.time) {
-          const price = p.seriesData?.get(seriesRef.current.candles)?.close ?? 0
-          rsiChart.setCrosshairPosition(price, p.time, rsiSerRef.current)
-        }
-      })
-    }
-
     const ro = new ResizeObserver(() => {
       if (mainElRef.current) chart.applyOptions({ width: mainElRef.current.clientWidth, height: mainElRef.current.clientHeight || 420 })
-      if (rsiElRef.current && rsiChartRef.current) rsiChartRef.current.applyOptions({ width: rsiElRef.current.clientWidth, height: rsiElRef.current.clientHeight || 100 })
     })
     ro.observe(mainElRef.current)
 
     return () => {
       ro.disconnect()
       chart.remove()
-      if (rsiChartRef.current) { rsiChartRef.current.remove(); rsiChartRef.current = null }
     }
   }, [])
 
@@ -763,26 +683,7 @@ export default function ChartContainer({
   useEffect(() => {
     if (!seriesRef.current.candles || !visibleCandles.length) return
     seriesRef.current.candles.setData(visibleCandles)
-    seriesRef.current.volume?.setData(
-      visibleCandles.map(c => ({
-        time: c.time,
-        value: c.volume || 0,
-        color: c.close >= c.open ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)',
-      }))
-    )
   }, [visibleCandles])
-
-  // ── Indicators ───────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const s = seriesRef.current
-    if (!visibleCandles.length || !s.ema9) return
-    s.ema9.setData(indicators.ema9  ? calcEMA(visibleCandles, 9)  : [])
-    s.ema21.setData(indicators.ema21 ? calcEMA(visibleCandles, 21) : [])
-    s.ema50.setData(indicators.ema50 ? calcEMA(visibleCandles, 50) : [])
-    s.vwap.setData(indicators.vwap  ? calcVWAP(visibleCandles)    : [])
-    s.volume?.applyOptions({ visible: !!indicators.volume })
-    if (rsiSerRef.current) rsiSerRef.current.setData(indicators.rsi ? calcRSI(visibleCandles) : [])
-  }, [visibleCandles, indicators])
 
   // ── SMC overlays ─────────────────────────────────────────────────────────────
   // FVG and OB use canvas box primitives (start at formation candle, extend right).
@@ -861,10 +762,6 @@ export default function ChartContainer({
     >
       <div ref={mainElRef} style={{ flex: 1, minHeight: 0 }} />
 
-      {indicators.rsi && (
-        <div ref={rsiElRef} style={{ height: '100px', borderTop: '1px solid #1c1f2e' }} />
-      )}
-
       {/* Placement hint */}
       {orderMode && (
         <div style={{
@@ -882,7 +779,7 @@ export default function ChartContainer({
       {/* Drag hint for TP/SL */}
       {pendingOrder && !orderMode && !dragDisplay && (
         <div style={{
-          position: 'absolute', bottom: indicators.rsi ? 108 : 8, right: 10,
+          position: 'absolute', bottom: 8, right: 10,
           fontSize: '10px', color: 'var(--muted)', pointerEvents: 'none',
           background: 'rgba(8,9,13,0.8)', padding: '3px 8px', borderRadius: '4px',
         }}>
