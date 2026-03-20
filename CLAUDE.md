@@ -18,11 +18,48 @@ No test framework is configured.
 Single-page app, 8 tabs. All routing is `useState` in `App.jsx` — no router library.
 Active tab string: `'dashboard' | 'concepts' | 'quiz' | 'playbook' | 'practice' | 'journal' | 'proptracker' | 'glossary'`
 
+### Authentication & Database
+**Supabase** (PostgreSQL + built-in auth). Deployed on free tier.
+- **Client**: `src/lib/supabase.js` — singleton `createClient` using `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` env vars.
+- **Auth hook**: `src/hooks/useAuth.js` — returns `{ session, user, loading, signOut }`. Listens to `onAuthStateChange`.
+- **Auth UI**: `src/components/auth/AuthPage.jsx` — email/password login, signup, password reset. No OAuth configured yet.
+- **Auth gate**: `App.jsx` shows `<AuthPage />` if no session, otherwise renders the app.
+- **Sign out**: `src/components/Header.jsx` — shows user email + sign out button (receives `signOut`, `userEmail`, `synced` as props).
+
+### Database Schema (Supabase PostgreSQL)
+5 tables, all with RLS enabled (`auth.uid() = user_id`):
+- `user_settings` — single row per user. JSONB columns: `indicators`, `smc_layers`, `sessions`, `drawings`, `daily_checklist`, `daily_notes`. Boolean: `magnet_enabled`, `br_strategy`. Array: `completed_concepts text[]`.
+- `journal_trades` — one row per trade. Columns map client fields: `entryPrice` → `entry_price`, `exitPrice` → `exit_price`, `stopLoss` → `stop_loss`, `target` → `take_profit`, `direction`, `symbol`, `contracts`, `setup`, `notes`, `pnl`, `rr`.
+- `quiz_history` — one row per quiz attempt. `score`, `total`, `category`, `difficulty`, `questions` (JSONB).
+- `accounts` — prop tracker state. `starting_balance`, `balance`, `peak_balance`, `daily_pnl` (JSONB).
+- `paper_accounts` — practice account. `starting_balance`, `balance`, `trades` (JSONB array).
+
+### Sync Layer
+`src/store/sync.js` — all Supabase CRUD functions.
+- `fetchUserData(userId)` — reads all 5 tables, returns `{ state, hasRemoteData }`.
+- `syncSettings(userId, data)` — **debounced 1s** upsert for rapid toggles (indicators, SMC, sessions, drawings, checklist, notes).
+- `syncSettingsNow(userId, data)` — immediate upsert for infrequent changes (concepts).
+- `syncJournalAdd/Update/Delete`, `syncQuizResult`, `syncAccount`, `syncPaperAccount` — fire-and-forget writes.
+- `initUserData(userId)` — creates default rows for new users.
+
+**Important sync patterns:**
+- Zustand is the in-memory cache; Supabase is source of truth.
+- All mutations update Zustand first (optimistic), then fire-and-forget sync to Supabase.
+- `_userId` and `_hydrated` fields on the store track auth/sync state (not persisted to localStorage).
+- Settings-related toggles use debounced sync to avoid hammering Supabase.
+- Client generates UUIDs (`crypto.randomUUID()`) — always pass to Supabase, don't rely on DB defaults.
+
+### Data Migration
+- `src/lib/migration.js` — `migrateLocalStorageToSupabase(userId)` and `hasLocalData()`.
+- `src/components/auth/MigrationPrompt.jsx` — shown once after first login if localStorage has data but Supabase doesn't.
+
 ### State Management
 `src/store/index.js` — single Zustand store with `persist` middleware → `localStorage` key `es-academy-v2`.
 Slices: `completedConcepts`, `quizHistory`, `journal`, `dailyChecklist`, `dailyNotes`, `account`, `indicators`, `smcLayers`, `sessions`, `drawings`, `paperAccount`.
-`partialize` ensures only data (not functions) is persisted.
+Auth fields: `_userId`, `_hydrated` (not persisted). Actions: `hydrateFromSupabase(userId)`, `clearOnLogout()`.
+`partialize` ensures only data (not functions or auth fields) is persisted.
 `sessions` slice: `{ asia, london, ny, asiaHL, londonHL, nyHL }` — booleans for session band + H/L toggles.
+Every mutation action also calls the corresponding sync function from `src/store/sync.js` when `_userId` is set.
 
 ### Data Layer (`src/data/`)
 Pure JS exports — no fetching:
@@ -69,6 +106,15 @@ All 12 concepts have pages: `CandlesPage`, `StructurePage`, `FVGPage`, `Liquidit
 ### Styling
 Single flat CSS file `src/styles/globals.css`. CSS custom properties on `:root`. No CSS modules, no Tailwind.
 Color tokens: `--green`, `--red`, `--blue`, `--amber`, `--purple` + `*-bg` variants.
+Auth styles: `.auth-page`, `.auth-card`, `.auth-input`, `.auth-button`, `.auth-error`, `.auth-message`, `.auth-links`.
+Header user styles: `.user-email`, `.signout-btn`.
+Migration styles: `.migration-overlay`, `.migration-card`, `.migration-actions`, `.migration-skip`.
+
+### Deployment
+- **Hosting**: Vercel. Auto-deploys on push to `main`.
+- **Serverless**: `api/yahoo.js` — proxies Yahoo Finance API requests.
+- **Env vars** (set in Vercel dashboard + local `.env`): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+- `.env` is gitignored.
 
 ### Alpha Futures Zero 50K Rules (used in PropTrackerPage + PlaybookPage)
 - Daily loss guard: $1,000
