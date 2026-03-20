@@ -11,10 +11,10 @@ export default function Header({ signOut, userEmail, synced }) {
     <div className="header">
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div className="logo">
-          <span style={{ color: 'var(--accent)' }}>ES</span> Academy
+          <span style={{ color: 'var(--accent)' }}>Trade</span>Forge
         </div>
         <div style={{ width: '1px', height: '16px', background: 'var(--border)', flexShrink: 0 }} />
-        <div style={{ fontSize: '11px', color: 'var(--muted)' }}>SMC · ICT · Prop Firm Training</div>
+        <div style={{ fontSize: '11px', color: 'var(--muted)' }}>SMC · ICT · Futures</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>

@@ -86,9 +86,9 @@ export default function AuthPage() {
                 >
                   <div className="space-y-1">
                     <h1 className="text-[2.2rem] font-bold leading-[1.1] tracking-tight text-white">
-                      <span style={{ color: '#4f8ef7' }}>ES</span> Academy
+                      <span style={{ color: '#4f8ef7' }}>Trade</span>Forge
                     </h1>
-                    <p className="text-[1.1rem] text-white/50 font-light">Sign in to your account</p>
+                    <p className="text-[1.1rem] text-white/50 font-light">Sharpen your edge</p>
                   </div>
 
                   <form onSubmit={handleSubmit} className="space-y-3">
@@ -171,7 +171,7 @@ export default function AuthPage() {
                     <h1 className="text-[2.2rem] font-bold leading-[1.1] tracking-tight text-white">
                       Create Account
                     </h1>
-                    <p className="text-[1.1rem] text-white/50 font-light">Start your trading journey</p>
+                    <p className="text-[1.1rem] text-white/50 font-light">Build your trading edge</p>
                   </div>
 
                   <form onSubmit={handleSubmit} className="space-y-3">

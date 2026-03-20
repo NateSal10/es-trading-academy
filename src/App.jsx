@@ -46,7 +46,7 @@ export default function App() {
       <div className="auth-page">
         <div className="auth-card" style={{ textAlign: 'center' }}>
           <div className="auth-logo">
-            <span style={{ color: 'var(--accent)' }}>ES</span> Academy
+            <span style={{ color: 'var(--accent)' }}>Trade</span>Forge
           </div>
           <p style={{ color: 'var(--muted)' }}>Loading...</p>
         </div>
