@@ -1134,6 +1134,11 @@ export default function ChartContainer({
       new Date(c.time * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
     ))].reverse()
 
+    // Current time in seconds (use last candle time for replay, real time for live)
+    const nowSecs = replayIndex > 0
+      ? allCandles[allCandles.length - 1].time
+      : Math.floor(Date.now() / 1000)
+
     let brBox = null
     for (const dateStr of etDates) {
       const [y, m, d] = dateStr.split('-').map(Number)
@@ -1141,6 +1146,9 @@ export default function ChartContainer({
 
       const start800 = Math.floor(Date.UTC(y, m - 1, d, 8, 0, 0) / 1000) + etOffsetSecs
       const start815 = Math.floor(Date.UTC(y, m - 1, d, 8, 15, 0) / 1000) + etOffsetSecs
+
+      // Skip this date if 8:15 AM ET hasn't passed yet — look at a previous day
+      if (nowSecs < start815) continue
 
       // Find candles in the 8:00-8:15 AM ET window from ALL candles
       const windowCandles = allCandles.filter(c => c.time >= start800 && c.time < start815)
