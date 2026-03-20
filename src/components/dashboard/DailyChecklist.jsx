@@ -3,10 +3,9 @@ import { format } from 'date-fns'
 import useStore from '../../store/index'
 import { CHECKLIST_SECTIONS, CHECKLIST_ITEMS } from '../../data/checklistData'
 
-const todayStr = format(new Date(), 'yyyy-MM-dd')
-const todayLabel = format(new Date(), 'EEEE, MMM d')
-
 export default function DailyChecklist() {
+  const todayStr   = format(new Date(), 'yyyy-MM-dd')
+  const todayLabel = format(new Date(), 'EEEE, MMM d')
   const dailyChecklist = useStore(s => s.dailyChecklist)
   const toggleChecklistItem = useStore(s => s.toggleChecklistItem)
   const [collapsed, setCollapsed] = useState({})

@@ -54,7 +54,7 @@ export default function AuthPage() {
           redirectTo: window.location.origin,
         })
         if (error) throw error
-        setMessage('Check your email for a password reset link.')
+        setMessage('If an account exists, a reset link has been sent.')
         setLoading(false)
         return
       }
@@ -69,7 +69,13 @@ export default function AuthPage() {
         if (error) throw error
       }
     } catch (err) {
-      setError(err.message)
+      if (mode === 'forgot') {
+        setError('If an account exists, a reset link has been sent.')
+      } else if (mode === 'signup') {
+        setError('Unable to create account. Please try again.')
+      } else {
+        setError('Invalid email or password.')
+      }
     }
     setLoading(false)
   }
@@ -79,7 +85,7 @@ export default function AuthPage() {
       provider: 'google',
       options: { redirectTo: window.location.origin },
     })
-    if (error) setError(error.message)
+    if (error) setError('Google sign-in failed. Please try again.')
   }
 
   const switchMode = (newMode) => {
@@ -284,11 +290,11 @@ export default function AuthPage() {
                           <input
                             className="auth-field"
                             type={showPassword ? 'text' : 'password'}
-                            placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter your password'}
+                            placeholder={mode === 'signup' ? 'Min 8 characters' : 'Enter your password'}
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
-                            minLength={6}
+                            minLength={8}
                             autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                             style={{
                               width: '100%',

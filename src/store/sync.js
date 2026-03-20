@@ -1,24 +1,44 @@
 import { supabase } from '../lib/supabase'
 
 // ─── Debounce helper ────────────────────────────────────────────────────────
-let settingsTimer = null
+const settingsTimers = new Map()
 const DEBOUNCE_MS = 1000
 
 function debounceSettings(userId, data) {
-  clearTimeout(settingsTimer)
-  settingsTimer = setTimeout(() => pushUserSettings(userId, data), DEBOUNCE_MS)
+  clearTimeout(settingsTimers.get(userId))
+  settingsTimers.set(userId, setTimeout(() => {
+    settingsTimers.delete(userId)
+    pushUserSettings(userId, data)
+  }, DEBOUNCE_MS))
+}
+
+export function cancelAllTimers() {
+  settingsTimers.forEach(id => clearTimeout(id))
+  settingsTimers.clear()
 }
 
 // ─── FETCH (hydration) ─────────────────────────────────────────────────────
 
 export async function fetchUserData(userId) {
-  const [settings, journal, quiz, account, paper] = await Promise.all([
-    supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
-    supabase.from('journal_trades').select('*').eq('user_id', userId).order('created_at'),
-    supabase.from('quiz_history').select('*').eq('user_id', userId).order('date'),
-    supabase.from('accounts').select('*').eq('user_id', userId).maybeSingle(),
-    supabase.from('paper_accounts').select('*').eq('user_id', userId).maybeSingle(),
-  ])
+  let settings, journal, quiz, account, paper
+  try {
+    ;[settings, journal, quiz, account, paper] = await Promise.all([
+      supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.from('journal_trades').select('*').eq('user_id', userId).order('created_at'),
+      supabase.from('quiz_history').select('*').eq('user_id', userId).order('date'),
+      supabase.from('accounts').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.from('paper_accounts').select('*').eq('user_id', userId).maybeSingle(),
+    ])
+  } catch (err) {
+    console.error('sync: fetchUserData network error', err)
+    return { state: {}, hasRemoteData: false, error: err }
+  }
+
+  if (settings.error) { console.error('sync: user_settings fetch failed', settings.error); return { state: {}, hasRemoteData: false, error: settings.error } }
+  if (journal.error)  { console.error('sync: journal_trades fetch failed', journal.error);  return { state: {}, hasRemoteData: false, error: journal.error } }
+  if (quiz.error)     { console.error('sync: quiz_history fetch failed', quiz.error);        return { state: {}, hasRemoteData: false, error: quiz.error } }
+  if (account.error)  { console.error('sync: accounts fetch failed', account.error);         return { state: {}, hasRemoteData: false, error: account.error } }
+  if (paper.error)    { console.error('sync: paper_accounts fetch failed', paper.error);     return { state: {}, hasRemoteData: false, error: paper.error } }
 
   // Check if user has ANY data in Supabase
   const hasRemoteData = !!(settings.data || account.data || paper.data ||
@@ -115,7 +135,8 @@ export function syncSettings(userId, data) {
 
 // Immediate version for less frequent updates
 export function syncSettingsNow(userId, data) {
-  clearTimeout(settingsTimer)
+  clearTimeout(settingsTimers.get(userId))
+  settingsTimers.delete(userId)
   pushUserSettings(userId, data)
 }
 

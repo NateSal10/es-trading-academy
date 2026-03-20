@@ -4,6 +4,7 @@ import {
   fetchUserData, syncSettings, syncSettingsNow,
   syncJournalAdd, syncJournalUpdate, syncJournalDelete,
   syncQuizResult, syncAccount, syncPaperAccount, initUserData,
+  cancelAllTimers,
 } from './sync'
 
 // Helper: get settings-related fields for sync
@@ -29,7 +30,12 @@ const useStore = create(
 
       hydrateFromSupabase: async (userId) => {
         set({ _userId: userId })
-        const { state, hasRemoteData } = await fetchUserData(userId)
+        const { state, hasRemoteData, error } = await fetchUserData(userId)
+        if (error) {
+          console.error('store: hydration failed, continuing with local state', error)
+          set({ _hydrated: true })
+          return false
+        }
         if (hasRemoteData) {
           set({ ...state, _hydrated: true })
         } else {
@@ -40,7 +46,7 @@ const useStore = create(
         return hasRemoteData
       },
 
-      clearOnLogout: () => set({
+      clearOnLogout: () => { cancelAllTimers(); set({
         _userId: null,
         _hydrated: false,
         completedConcepts: [],
@@ -56,7 +62,7 @@ const useStore = create(
         magnetEnabled: false,
         brStrategy: false,
         paperAccount: { startingBalance: 10000, balance: 10000, trades: [] },
-      }),
+      }) },
 
       // ─── LEARN ─────────────────────────────────────────────────────
       completedConcepts: [],

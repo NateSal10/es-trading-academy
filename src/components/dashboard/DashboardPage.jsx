@@ -4,8 +4,6 @@ import SessionClock from './SessionClock'
 import useCountUp from '../../hooks/useCountUp'
 import ConsistencyChart from '../proptracker/ConsistencyChart'
 
-const todayStr = new Date().toISOString().split('T')[0]
-
 function fmt$(n, sign = false) {
   const s = sign && n > 0 ? '+' : n < 0 ? '-' : ''
   return s + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -557,6 +555,7 @@ function TradeCalendar({ trades, dailyPnL }) {
 
 export default function DashboardPage() {
   const [mode, setMode] = useState('prop')
+  const todayStr = new Date().toISOString().split('T')[0]
   const account      = useStore(s => s.account)
   const paperAccount = useStore(s => s.paperAccount)
   const allTrades    = paperAccount.trades
@@ -578,12 +577,16 @@ export default function DashboardPage() {
 
   const balance     = mode === 'prop' ? account.balance     : paperAccount.balance
   const startingBal = mode === 'prop' ? account.startingBalance : paperAccount.startingBalance
-  const peakBalance = mode === 'prop'
-    ? account.peakBalance
-    : trades.reduce((peak, _, i) => {
-        const cumBal = startingBal + trades.slice(0, i + 1).reduce((s, x) => s + (x.pnl || 0), 0)
-        return Math.max(peak, cumBal)
-      }, startingBal)
+  const peakBalance = useMemo(() => {
+    if (mode === 'prop') return account.peakBalance
+    let running = startingBal
+    let peak = startingBal
+    for (const t of trades) {
+      running += (t.pnl || 0)
+      if (running > peak) peak = running
+    }
+    return peak
+  }, [mode, account.peakBalance, startingBal, trades])
 
   const todayPnL    = dailyPnL[todayStr] || 0
   const todayTrades = trades.filter(t => (t.date || '').startsWith(todayStr))

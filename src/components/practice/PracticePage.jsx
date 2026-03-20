@@ -211,7 +211,7 @@ export default function PracticePage() {
     // Only check TP/SL on candles that started AFTER the trade was filled
     const canCheckTPSL = !activeOrder || !activeOrder.filledAtCandleTime || candle.time > activeOrder.filledAtCandleTime
     if (canCheckTPSL) checkTPSL(candle)
-  }, [candles, replayMode, symbol, timeframe])
+  }, [candles, replayMode, symbol, timeframe, awaitingFill, activeOrder])
 
   // ── Place order on chart click ───────────────────────────────────────────
   const handleChartClick = useCallback((price) => {
