@@ -106,6 +106,9 @@ const useStore = create(
       // Drawings (persisted)
       drawings: [],
       addDrawing: (drawing) => set(s => ({ drawings: [...s.drawings, drawing] })),
+      updateDrawing: (id, patch) => set(s => ({
+        drawings: s.drawings.map(d => d.id === id ? { ...d, ...patch } : d),
+      })),
       removeDrawing: (id) => set(s => ({ drawings: s.drawings.filter(d => d.id !== id) })),
       clearDrawings: () => set({ drawings: [] }),
 

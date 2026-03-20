@@ -21,6 +21,90 @@ function snapToOHLC(candles, clickedTime, clickedPrice) {
   return +snapped.toFixed(2)
 }
 
+// ── Drawing hit-test helpers ───────────────────────────────────────────────────
+const HIT_PX = 10
+
+function dist2D(x1, y1, x2, y2) {
+  return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+}
+
+function segmentDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1
+  if (dx === 0 && dy === 0) return dist2D(px, py, x1, y1)
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
+  return dist2D(px, py, x1 + t * dx, y1 + t * dy)
+}
+
+// Returns hit mode string or null.
+// Modes: 'move' | 'p1' | 'p2' | 'corner-11' | 'corner-22' | 'corner-12' | 'corner-21'
+function hitTestDrawing(d, mx, my, cs, ts) {
+  if (d.type === 'hline') {
+    const y = cs.priceToCoordinate(d.price)
+    if (y == null) return null
+    return Math.abs(my - y) <= HIT_PX ? 'move' : null
+  }
+  if (d.type === 'line') {
+    const x1 = ts.timeToCoordinate(d.p1.time), y1 = cs.priceToCoordinate(d.p1.price)
+    const x2 = ts.timeToCoordinate(d.p2.time), y2 = cs.priceToCoordinate(d.p2.price)
+    if (x1 == null || y1 == null || x2 == null || y2 == null) return null
+    if (dist2D(mx, my, x1, y1) <= HIT_PX) return 'p1'
+    if (dist2D(mx, my, x2, y2) <= HIT_PX) return 'p2'
+    if (segmentDist(mx, my, x1, y1, x2, y2) <= HIT_PX) return 'move'
+    return null
+  }
+  if (d.type === 'box') {
+    const x1 = ts.timeToCoordinate(d.p1.time), y1 = cs.priceToCoordinate(d.p1.price)
+    const x2 = ts.timeToCoordinate(d.p2.time), y2 = cs.priceToCoordinate(d.p2.price)
+    if (x1 == null || y1 == null || x2 == null || y2 == null) return null
+    if (dist2D(mx, my, x1, y1) <= HIT_PX) return 'corner-11'
+    if (dist2D(mx, my, x2, y2) <= HIT_PX) return 'corner-22'
+    if (dist2D(mx, my, x1, y2) <= HIT_PX) return 'corner-12'
+    if (dist2D(mx, my, x2, y1) <= HIT_PX) return 'corner-21'
+    const left = Math.min(x1, x2), right = Math.max(x1, x2)
+    const top  = Math.min(y1, y2), bot   = Math.max(y1, y2)
+    if (mx >= left && mx <= right && my >= top && my <= bot) return 'move'
+    return null
+  }
+  return null
+}
+
+// Compute the drawing patch for a given drag mode + current mouse position
+function applyDragPatch(orig, mode, nx, ny, dxPx, dyPx, cs, ts) {
+  if (orig.type === 'hline') {
+    const p = cs.coordinateToPrice(ny)
+    return p != null ? { price: +p.toFixed(2) } : null
+  }
+  if (orig.type === 'line' || orig.type === 'box') {
+    if (mode === 'p1' || mode === 'corner-11') {
+      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
+      return (t && p != null) ? { p1: { time: t, price: +p.toFixed(2) } } : null
+    }
+    if (mode === 'p2' || mode === 'corner-22') {
+      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
+      return (t && p != null) ? { p2: { time: t, price: +p.toFixed(2) } } : null
+    }
+    if (mode === 'corner-12') {
+      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
+      return (t && p != null) ? { p1: { ...orig.p1, time: t }, p2: { ...orig.p2, price: +p.toFixed(2) } } : null
+    }
+    if (mode === 'corner-21') {
+      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
+      return (t && p != null) ? { p2: { ...orig.p2, time: t }, p1: { ...orig.p1, price: +p.toFixed(2) } } : null
+    }
+    if (mode === 'move') {
+      const ox1 = ts.timeToCoordinate(orig.p1.time), oy1 = cs.priceToCoordinate(orig.p1.price)
+      const ox2 = ts.timeToCoordinate(orig.p2.time), oy2 = cs.priceToCoordinate(orig.p2.price)
+      if (ox1 == null || oy1 == null || ox2 == null || oy2 == null) return null
+      const t1 = ts.coordinateToTime(ox1 + dxPx), p1 = cs.coordinateToPrice(oy1 + dyPx)
+      const t2 = ts.coordinateToTime(ox2 + dxPx), p2 = cs.coordinateToPrice(oy2 + dyPx)
+      return (t1 && p1 != null && t2 && p2 != null)
+        ? { p1: { time: t1, price: +p1.toFixed(2) }, p2: { time: t2, price: +p2.toFixed(2) } }
+        : null
+    }
+  }
+  return null
+}
+
 // ── SMC detection ─────────────────────────────────────────────────────────────
 // Detectors return ACTIVE (unmitigated/unswept) zones only.
 // All operate on the last LOOKBACK candles so distant history is ignored.
@@ -382,8 +466,15 @@ export default function ChartContainer({
   const onTickPriceRef   = useRef(onTickPrice)
   const addDrawingRef    = useRef(null)
   const onDrawingDoneRef = useRef(null)
-  const [hoverLine, setHoverLine] = useState(null)   // 'tp' | 'sl' | null — for cursor
-  const [dragDisplay, setDragDisplay] = useState(null) // { pts, dollars, y } — shown while dragging
+  const [hoverLine, setHoverLine]       = useState(null)   // 'tp' | 'sl' | null — for cursor
+  const [hoverDrawing, setHoverDrawing] = useState(false)  // true when hovering a drawing
+  const [dragDisplay, setDragDisplay]   = useState(null)   // { pts, dollars, y } — shown while dragging
+  const [selectedDrawingId, setSelectedDrawingId] = useState(null)
+  const selectedDrawingIdRef = useRef(null)
+  const drawingsRef          = useRef([])
+  const drawingDragRef       = useRef(null)
+  const updateDrawingRef     = useRef(null)
+  const removeDrawingRef     = useRef(null)
 
   const smcLayers  = useStore(s => s.smcLayers)
   const sessions   = useStore(s => s.sessions)
@@ -615,9 +706,35 @@ export default function ChartContainer({
   useEffect(() => { onTickPriceRef.current    = onTickPrice    }, [onTickPrice])
   useEffect(() => { onDrawingDoneRef.current  = onDrawingDone  }, [onDrawingDone])
 
-  // Keep addDrawing ref in sync from store
-  const addDrawingFn = useStore(s => s.addDrawing)
-  useEffect(() => { addDrawingRef.current = addDrawingFn }, [addDrawingFn])
+  // Keep drawing-related refs in sync from store
+  const addDrawingFn    = useStore(s => s.addDrawing)
+  const updateDrawingFn = useStore(s => s.updateDrawing)
+  const removeDrawingFn = useStore(s => s.removeDrawing)
+  useEffect(() => { addDrawingRef.current    = addDrawingFn    }, [addDrawingFn])
+  useEffect(() => { updateDrawingRef.current = updateDrawingFn }, [updateDrawingFn])
+  useEffect(() => { removeDrawingRef.current = removeDrawingFn }, [removeDrawingFn])
+  useEffect(() => { selectedDrawingIdRef.current = selectedDrawingId }, [selectedDrawingId])
+
+  // Sync selectedId highlight to primitive
+  useEffect(() => {
+    drawingPrimRef.current?.setSelectedId(selectedDrawingId)
+  }, [selectedDrawingId])
+
+  // Backspace / Delete key removes the selected drawing
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Backspace' && e.key !== 'Delete') return
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      const id = selectedDrawingIdRef.current
+      if (!id) return
+      e.preventDefault()
+      removeDrawingRef.current?.(id)
+      setSelectedDrawingId(null)
+      drawingPrimRef.current?.setSelectedId(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // Reset first-click state when drawing tool is cleared
   useEffect(() => {
@@ -702,12 +819,73 @@ export default function ChartContainer({
   }
 
   const handleMouseDown = useCallback((e) => {
-    // Use whichever order is currently active (pending takes priority)
-    const order  = pendingOrderRef.current || activeOrderRef.current
-    const isPending = !!pendingOrderRef.current
-    if (!order || !seriesRef.current.candles) return
+    const cs    = seriesRef.current.candles
+    const chart = chartRef.current
+    if (!cs || !chart) return
+    const rect = mainElRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
 
-    const cs = seriesRef.current.candles
+    // ── 1. Drawing drag / select (only when no drawing tool is placing) ───────
+    if (!drawingToolRef.current) {
+      const dl = drawingsRef.current
+      const ts = chart.timeScale()
+      for (let i = dl.length - 1; i >= 0; i--) {
+        const d = dl[i]
+        const mode = hitTestDrawing(d, mouseX, mouseY, cs, ts)
+        if (!mode) continue
+
+        setSelectedDrawingId(d.id)
+        drawingPrimRef.current?.setSelectedId(d.id)
+        drawingDragRef.current = {
+          id: d.id, mode,
+          origDrawing: { ...d, p1: d.p1 ? { ...d.p1 } : undefined, p2: d.p2 ? { ...d.p2 } : undefined },
+          startX: mouseX, startY: mouseY,
+          currentPatch: null,
+        }
+        e.preventDefault()
+        e.stopPropagation()
+        chart.applyOptions({ handleScroll: false, handleScale: false })
+
+        function onMoveDrawing(ev) {
+          const drag = drawingDragRef.current
+          if (!drag) return
+          const nx = ev.clientX - rect.left
+          const ny = ev.clientY - rect.top
+          const patch = applyDragPatch(drag.origDrawing, drag.mode, nx, ny, nx - drag.startX, ny - drag.startY, cs, ts)
+          if (patch) {
+            drag.currentPatch = patch
+            const updated = { ...drag.origDrawing, ...patch }
+            drawingPrimRef.current?.updateDrawings(
+              drawingsRef.current.map(dr => dr.id === drag.id ? updated : dr)
+            )
+          }
+        }
+
+        function onUpDrawing() {
+          const drag = drawingDragRef.current
+          if (drag?.currentPatch) updateDrawingRef.current?.(drag.id, drag.currentPatch)
+          drawingDragRef.current = null
+          chart.applyOptions({ handleScroll: true, handleScale: true })
+          document.removeEventListener('mousemove', onMoveDrawing)
+          document.removeEventListener('mouseup', onUpDrawing)
+        }
+
+        document.addEventListener('mousemove', onMoveDrawing)
+        document.addEventListener('mouseup', onUpDrawing)
+        return
+      }
+      // Clicked empty space → deselect
+      setSelectedDrawingId(null)
+      drawingPrimRef.current?.setSelectedId(null)
+    }
+
+    // ── 2. TP/SL drag (existing logic) ───────────────────────────────────────
+    const order     = pendingOrderRef.current || activeOrderRef.current
+    const isPending = !!pendingOrderRef.current
+    if (!order) return
+
     const y = chartY(e.clientY)
     if (y == null) return
 
@@ -722,20 +900,17 @@ export default function ChartContainer({
     draggingRef.current = target
     e.preventDefault()
     e.stopPropagation()
-
-    chartRef.current?.applyOptions({ handleScroll: false, handleScale: false })
+    chart.applyOptions({ handleScroll: false, handleScale: false })
 
     function onMove(ev) {
       const price = priceAt(ev.clientY)
       if (price == null) return
       const p = +price.toFixed(2)
 
-      // Route update to the right order
       const cb = isPending ? onUpdateOrderRef.current : onUpdateActiveOrderRef.current
       if (draggingRef.current === 'tp') cb?.({ tp: p })
       if (draggingRef.current === 'sl') cb?.({ sl: p })
 
-      // Distance label
       const cur = isPending ? pendingOrderRef.current : activeOrderRef.current
       if (cur) {
         const pts = Math.abs(p - cur.entry)
@@ -752,7 +927,7 @@ export default function ChartContainer({
     function onUp() {
       draggingRef.current = null
       setDragDisplay(null)
-      chartRef.current?.applyOptions({ handleScroll: true, handleScale: true })
+      chart.applyOptions({ handleScroll: true, handleScale: true })
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
@@ -771,37 +946,54 @@ export default function ChartContainer({
   const handleMouseMove = useCallback((e) => {
     if (draggingRef.current) return
 
-    // Drawing preview: when a line/box first point is set, show ghost
+    const cs    = seriesRef.current.candles
+    const chart = chartRef.current
+    const rect  = mainElRef.current?.getBoundingClientRect()
+    if (!cs || !chart || !rect) return
+
+    const relX = e.clientX - rect.left
+    const relY = e.clientY - rect.top
     const tool = drawingToolRef.current
-    if ((tool === 'line' || tool === 'box') && drawStartRef.current) {
-      const cs = seriesRef.current.candles
-      const chart = chartRef.current
-      if (cs && chart) {
-        const rect = mainElRef.current?.getBoundingClientRect()
-        if (rect) {
-          const relX = e.clientX - rect.left
-          const relY = e.clientY - rect.top
-          const hoveredTime  = chart.timeScale().coordinateToTime(relX)
-          const hoveredPrice = cs.coordinateToPrice(relY)
-          if (hoveredTime != null && hoveredPrice != null) {
-            const snappedPrice = magnetEnabledRef.current
-              ? snapToOHLC(visibleCandlesRef.current, hoveredTime, hoveredPrice)
-              : +hoveredPrice.toFixed(2)
-            drawingPrimRef.current?.setPreview({
-              type: tool,
-              p1: drawStartRef.current,
-              p2: { time: hoveredTime, price: snappedPrice },
-              color: 'rgba(79,142,247,0.8)',
-            })
-          }
+
+    if (tool) {
+      // ── Drawing tool active: show snap ghost on hover ─────────────────────
+      const hoveredTime  = chart.timeScale().coordinateToTime(relX)
+      const hoveredPrice = cs.coordinateToPrice(relY)
+      if (hoveredTime != null && hoveredPrice != null) {
+        const snapped = magnetEnabledRef.current
+          ? snapToOHLC(visibleCandlesRef.current, hoveredTime, hoveredPrice)
+          : +hoveredPrice.toFixed(2)
+        if (tool === 'hline') {
+          // Always show ghost hline at snapped price
+          drawingPrimRef.current?.setPreview({ type: 'hline', price: snapped, color: 'rgba(79,142,247,0.55)' })
+        } else if (drawStartRef.current) {
+          // After first click: full ghost toward cursor
+          drawingPrimRef.current?.setPreview({
+            type: tool, p1: drawStartRef.current,
+            p2: { time: hoveredTime, price: snapped },
+            color: 'rgba(79,142,247,0.8)',
+          })
+        } else if (magnetEnabledRef.current) {
+          // Before first click + magnet on: ghost hline shows snap price
+          drawingPrimRef.current?.setPreview({ type: 'hline', price: snapped, color: 'rgba(79,142,247,0.35)' })
         }
       }
+      return // Don't run TP/SL hover check while drawing tool is active
     }
 
-    const order = pendingOrderRef.current || activeOrderRef.current
-    if (!order || !seriesRef.current.candles) { setHoverLine(null); return }
+    // ── No drawing tool: check if hovering any drawing (for move cursor) ─────
+    const dl = drawingsRef.current
+    if (dl.length > 0) {
+      const ts = chart.timeScale()
+      setHoverDrawing(dl.some(d => hitTestDrawing(d, relX, relY, cs, ts) !== null))
+    } else {
+      setHoverDrawing(false)
+    }
 
-    const cs = seriesRef.current.candles
+    // ── TP/SL hover detection ─────────────────────────────────────────────────
+    const order = pendingOrderRef.current || activeOrderRef.current
+    if (!order) { setHoverLine(null); return }
+
     const y = chartY(e.clientY)
     if (y == null) { setHoverLine(null); return }
 
@@ -815,6 +1007,8 @@ export default function ChartContainer({
 
   const handleMouseLeave = useCallback(() => {
     setHoverLine(null)
+    setHoverDrawing(false)
+    drawingPrimRef.current?.setPreview(null)
   }, [])
 
   // ── Feed candle data ─────────────────────────────────────────────────────────
@@ -892,7 +1086,8 @@ export default function ChartContainer({
   // ── User drawings overlay ─────────────────────────────────────────────────────
   const drawings = useStore(s => s.drawings)
   useEffect(() => {
-    drawingPrimRef.current?.updateDrawings(drawings)
+    drawingsRef.current = drawings
+    if (!drawingDragRef.current) drawingPrimRef.current?.updateDrawings(drawings)
   }, [drawings])
 
   // ── 15-min B&R strategy box ───────────────────────────────────────────────────
@@ -945,7 +1140,10 @@ export default function ChartContainer({
     }] : [])
   }, [visibleCandles, brStrategy])
 
-  const cursor = (drawingTool || orderMode) ? 'crosshair' : hoverLine ? 'ns-resize' : 'default'
+  const cursor = (drawingTool || orderMode) ? 'crosshair'
+    : hoverDrawing ? 'move'
+    : hoverLine ? 'ns-resize'
+    : 'default'
 
   return (
     <div
