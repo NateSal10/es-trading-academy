@@ -392,6 +392,7 @@ function DayModal({ dateStr, dayTrades, pnl, onClose }) {
 
 function TradeCalendar({ trades, dailyPnL }) {
   const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
   const [year,  setYear]  = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth()) // 0-indexed
   const [selectedDay, setSelectedDay] = useState(null) // dateStr of clicked day
