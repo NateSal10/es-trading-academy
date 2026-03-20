@@ -1109,44 +1109,55 @@ export default function ChartContainer({
   }, [drawings])
 
   // ── 15-min B&R strategy box ───────────────────────────────────────────────────
+  // Shows the 8:00–8:15 AM ET range from the most recent NY session.
+  // Persists until the next NY session opens (9:30 AM ET next trading day).
   const brStrategy = useStore(s => s.brStrategy)
   useEffect(() => {
     if (!brStrategy) { brStrategyPrimRef.current?.updateZones([]); return }
 
-    const etDates = [...new Set(visibleCandles.map(c =>
+    // Use ALL candles (not just visible) so the box doesn't disappear when scrolling
+    const allCandles = replayIndex > 0 ? candles.slice(0, replayIndex) : candles
+    if (!allCandles.length) { brStrategyPrimRef.current?.updateZones([]); return }
+
+    // Helper: get ET offset for a given date (handles DST)
+    function getETOffset(y, m, d) {
+      const refDate = new Date(Date.UTC(y, m - 1, d, 13, 0, 0))
+      const tzPart = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', timeZoneName: 'shortOffset',
+      }).formatToParts(refDate).find(p => p.type === 'timeZoneName').value
+      const etOffsetHours = parseInt(tzPart.replace('GMT', '') || '0')
+      return -etOffsetHours * 3600
+    }
+
+    // Get unique ET dates from ALL candles, most recent first
+    const etDates = [...new Set(allCandles.map(c =>
       new Date(c.time * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
     ))].reverse()
 
     let brBox = null
     for (const dateStr of etDates) {
       const [y, m, d] = dateStr.split('-').map(Number)
-
-      // Derive actual ET UTC offset for DST correctness
-      const refDate = new Date(Date.UTC(y, m - 1, d, 13, 0, 0))
-      const tzPart = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York', timeZoneName: 'shortOffset',
-      }).formatToParts(refDate).find(p => p.type === 'timeZoneName').value
-      const etOffsetHours = parseInt(tzPart.replace('GMT', '') || '0')
-      const etOffsetSecs = -etOffsetHours * 3600
+      const etOffsetSecs = getETOffset(y, m, d)
 
       const start800 = Math.floor(Date.UTC(y, m - 1, d, 8, 0, 0) / 1000) + etOffsetSecs
       const start815 = Math.floor(Date.UTC(y, m - 1, d, 8, 15, 0) / 1000) + etOffsetSecs
 
-      const windowCandles = visibleCandles.filter(c => c.time >= start800 && c.time < start815)
+      // Find candles in the 8:00-8:15 AM ET window from ALL candles
+      const windowCandles = allCandles.filter(c => c.time >= start800 && c.time < start815)
       if (windowCandles.length > 0) {
         brBox = {
           top: Math.max(...windowCandles.map(c => c.high)),
           bot: Math.min(...windowCandles.map(c => c.low)),
-          startTime: windowCandles[0].time,
+          startTime: start800,
         }
         break
       }
 
       // Fallback for large timeframes: candle that contains 8:00 AM ET
-      const containing = [...visibleCandles]
+      const containing = [...allCandles]
         .filter(c => c.time <= start800)
         .sort((a, b) => b.time - a.time)[0]
-      if (containing) {
+      if (containing && containing.time >= start800 - 86400) {
         brBox = { top: containing.high, bot: containing.low, startTime: containing.time }
         break
       }
@@ -1156,7 +1167,7 @@ export default function ChartContainer({
       type: 'bull', top: brBox.top, bot: brBox.bot,
       startTime: brBox.startTime, label: 'B&R 8AM', _brStrategy: true,
     }] : [])
-  }, [visibleCandles, brStrategy])
+  }, [candles, replayIndex, brStrategy])
 
   const cursor = (drawingTool || orderMode) ? 'crosshair'
     : hoverDrawing ? 'move'
