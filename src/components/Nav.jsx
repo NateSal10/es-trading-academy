@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   CandlestickChart,
   BookOpen,
-  ClipboardList,
   BookText,
 } from 'lucide-react'
 
@@ -11,7 +10,6 @@ const TABS = [
   { id: 'dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
   { id: 'practice',    label: 'Practice',     icon: CandlestickChart },
   { id: 'concepts',    label: 'Learn',        icon: BookOpen },
-  { id: 'journal',     label: 'Journal',      icon: ClipboardList },
   { id: 'glossary',    label: 'Glossary',     icon: BookText },
 ]
 
