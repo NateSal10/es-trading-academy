@@ -102,6 +102,17 @@ export default function AuthPage() {
 
   return (
     <div className={cn('flex w-full flex-col min-h-screen bg-black relative')}>
+      {/* Override browser autofill colors */}
+      <style>{`
+        .auth-field:-webkit-autofill,
+        .auth-field:-webkit-autofill:hover,
+        .auth-field:-webkit-autofill:focus {
+          -webkit-box-shadow: 0 0 0 1000px rgba(15, 18, 30, 1) inset !important;
+          -webkit-text-fill-color: #fff !important;
+          caret-color: #fff !important;
+          transition: background-color 5000s ease-in-out 0s;
+        }
+      `}</style>
       {/* Animated background */}
       <div className="absolute inset-0 z-0">
         <div className="absolute inset-0">
@@ -142,6 +153,13 @@ export default function AuthPage() {
                     backdropFilter: 'blur(24px)',
                   }}
                 >
+                  {/* Branding */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>
+                      <span style={{ color: '#4f8ef7' }}>Trade</span>Forge
+                    </span>
+                  </div>
+
                   {/* Heading */}
                   <div style={{ marginBottom: '28px' }}>
                     <h1
@@ -223,6 +241,7 @@ export default function AuthPage() {
                         Email <span style={{ color: '#ef4444' }}>*</span>
                       </label>
                       <input
+                        className="auth-field"
                         type="email"
                         placeholder="Enter your email address"
                         value={email}
@@ -263,6 +282,7 @@ export default function AuthPage() {
                         </label>
                         <div style={{ position: 'relative' }}>
                           <input
+                            className="auth-field"
                             type={showPassword ? 'text' : 'password'}
                             placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter your password'}
                             value={password}
