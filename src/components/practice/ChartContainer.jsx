@@ -440,9 +440,10 @@ export default function ChartContainer({
   activeOrder,          // confirmed + filled order being tracked for TP/SL
   awaitingFill,         // confirmed but not yet filled (limit/stop pending entry)
   onChartClick,         // (price: number) => void
-  onUpdateOrder,        // ({ tp?, sl? }) => void  — updates pendingOrder
-  onUpdateActiveOrder,  // ({ tp?, sl? }) => void  — updates activeOrder
-  onTickPrice,          // (price: number) => void — called on each tick with simulated close
+  onUpdateOrder,          // ({ tp?, sl? }) => void  — updates pendingOrder
+  onUpdateActiveOrder,    // ({ tp?, sl? }) => void  — updates activeOrder
+  onUpdateAwaitingFill,   // ({ tp?, sl? }) => void  — updates awaitingFill TP/SL
+  onTickPrice,            // (price: number) => void — called on each tick with simulated close
   drawingTool,          // null | 'hline' | 'line' | 'box'
   magnetEnabled,        // boolean — snap clicks to OHLC
   onDrawingDone,        // () => void — called after a drawing is placed
@@ -463,9 +464,11 @@ export default function ChartContainer({
   const tickRef              = useRef({ close: null, high: null, low: null, barTime: null })
   const activeOrderRef       = useRef(activeOrder)
   const onUpdateActiveOrderRef = useRef(onUpdateActiveOrder)
-  const onTickPriceRef   = useRef(onTickPrice)
-  const addDrawingRef    = useRef(null)
-  const onDrawingDoneRef = useRef(null)
+  const onTickPriceRef          = useRef(onTickPrice)
+  const onUpdateAwaitingFillRef = useRef(onUpdateAwaitingFill)
+  const awaitingFillRef         = useRef(awaitingFill)
+  const addDrawingRef           = useRef(null)
+  const onDrawingDoneRef        = useRef(null)
   const [hoverLine, setHoverLine]       = useState(null)   // 'tp' | 'sl' | null — for cursor
   const [hoverDrawing, setHoverDrawing] = useState(false)  // true when hovering a drawing
   const [dragDisplay, setDragDisplay]   = useState(null)   // { pts, dollars, y } — shown while dragging
@@ -637,9 +640,9 @@ export default function ChartContainer({
           title: `TRIGGER @ ${awaitingFill.stopTrigger.toFixed(2)}`,
         })
       }
-      // Also show TP/SL as faint guides
-      orderLinesRef.current.tp = cs.createPriceLine({ price: awaitingFill.tp, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' })
-      orderLinesRef.current.sl = cs.createPriceLine({ price: awaitingFill.sl, color: 'rgba(239,68,68,0.3)',  lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' })
+      // Show TP/SL as fully visible draggable lines
+      orderLinesRef.current.tp = cs.createPriceLine({ price: awaitingFill.tp, color: '#22c55e', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `TP ${awaitingFill.tp.toFixed(2)}` })
+      orderLinesRef.current.sl = cs.createPriceLine({ price: awaitingFill.sl, color: '#ef4444', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `SL ${awaitingFill.sl.toFixed(2)}` })
       return
     }
 
@@ -698,13 +701,23 @@ export default function ChartContainer({
     if (ol.trigger && order.stopTrigger != null) ol.trigger.applyOptions({ price: order.stopTrigger, title: `TRIGGER @ ${order.stopTrigger.toFixed(2)}` })
   }, [pendingOrder?.tp, pendingOrder?.sl, pendingOrder?.entry, pendingOrder?.stopTrigger, activeOrder?.tp, activeOrder?.sl])
 
+  // ── Update TP/SL lines while awaiting fill (so drag updates are reflected) ─
+  useEffect(() => {
+    const ol = orderLinesRef.current
+    if (!awaitingFill || pendingOrder || activeOrder) return
+    if (ol.tp) ol.tp.applyOptions({ price: awaitingFill.tp, title: `TP ${awaitingFill.tp.toFixed(2)}` })
+    if (ol.sl) ol.sl.applyOptions({ price: awaitingFill.sl, title: `SL ${awaitingFill.sl.toFixed(2)}` })
+  }, [awaitingFill?.tp, awaitingFill?.sl])
+
   // Keep refs in sync so document listeners always see fresh values
   useEffect(() => { pendingOrderRef.current        = pendingOrder        }, [pendingOrder])
   useEffect(() => { onUpdateOrderRef.current       = onUpdateOrder       }, [onUpdateOrder])
   useEffect(() => { activeOrderRef.current         = activeOrder         }, [activeOrder])
   useEffect(() => { onUpdateActiveOrderRef.current = onUpdateActiveOrder }, [onUpdateActiveOrder])
-  useEffect(() => { onTickPriceRef.current    = onTickPrice    }, [onTickPrice])
-  useEffect(() => { onDrawingDoneRef.current  = onDrawingDone  }, [onDrawingDone])
+  useEffect(() => { onTickPriceRef.current          = onTickPrice          }, [onTickPrice])
+  useEffect(() => { onUpdateAwaitingFillRef.current = onUpdateAwaitingFill }, [onUpdateAwaitingFill])
+  useEffect(() => { awaitingFillRef.current         = awaitingFill         }, [awaitingFill])
+  useEffect(() => { onDrawingDoneRef.current        = onDrawingDone        }, [onDrawingDone])
 
   // Keep drawing-related refs in sync from store
   const addDrawingFn    = useStore(s => s.addDrawing)
@@ -881,9 +894,10 @@ export default function ChartContainer({
       drawingPrimRef.current?.setSelectedId(null)
     }
 
-    // ── 2. TP/SL drag (existing logic) ───────────────────────────────────────
-    const order     = pendingOrderRef.current || activeOrderRef.current
-    const isPending = !!pendingOrderRef.current
+    // ── 2. TP/SL drag ────────────────────────────────────────────────────────
+    const order      = pendingOrderRef.current || activeOrderRef.current || awaitingFillRef.current
+    const isPending  = !!pendingOrderRef.current
+    const isAwaiting = !pendingOrderRef.current && !activeOrderRef.current && !!awaitingFillRef.current
     if (!order) return
 
     const y = chartY(e.clientY)
@@ -907,11 +921,15 @@ export default function ChartContainer({
       if (price == null) return
       const p = +price.toFixed(2)
 
-      const cb = isPending ? onUpdateOrderRef.current : onUpdateActiveOrderRef.current
+      const cb = isPending  ? onUpdateOrderRef.current
+               : isAwaiting ? onUpdateAwaitingFillRef.current
+               : onUpdateActiveOrderRef.current
       if (draggingRef.current === 'tp') cb?.({ tp: p })
       if (draggingRef.current === 'sl') cb?.({ sl: p })
 
-      const cur = isPending ? pendingOrderRef.current : activeOrderRef.current
+      const cur = isPending  ? pendingOrderRef.current
+                : isAwaiting ? awaitingFillRef.current
+                : activeOrderRef.current
       if (cur) {
         const pts = Math.abs(p - cur.entry)
         const pv  = pointValue ?? 50

@@ -177,6 +177,23 @@ export default function PracticePage() {
   // ── Live mode: check fill + TP/SL whenever candles update (polling) ──────
   // Skip the check when symbol/timeframe just changed — the new candles cover
   // a different price range and would falsely trigger TP/SL on timeframe switch.
+  // Replay position anchor — stores candle timestamp across timeframe switches
+  const replayAnchorRef = useRef(null)
+
+  // When candles reload (TF change), restore replay position closest to saved timestamp
+  useEffect(() => {
+    if (!replayMode || !replayAnchorRef.current || candles.length === 0) return
+    const anchor = replayAnchorRef.current
+    replayAnchorRef.current = null
+    // Find the index of the candle whose time is closest to (and not after) the anchor
+    let best = 1
+    for (let i = 0; i < candles.length; i++) {
+      if (candles[i].time <= anchor) best = i + 1
+      else break
+    }
+    setReplayIndex(Math.max(1, Math.min(best, candles.length)))
+  }, [candles, replayMode])
+
   const liveCheckKeyRef = useRef(`${symbol}-${timeframe}`)
   useEffect(() => {
     const key = `${symbol}-${timeframe}`
@@ -226,6 +243,10 @@ export default function PracticePage() {
 
   function handleUpdateActiveOrder(patch) {
     setActiveOrder(o => o ? { ...o, ...patch } : o)
+  }
+
+  function handleUpdateAwaitingFill(patch) {
+    setAwaitingFill(o => o ? { ...o, ...patch } : o)
   }
 
   function handleConfirm() {
@@ -333,7 +354,15 @@ export default function PracticePage() {
         <div className="toolbar-sep" />
 
         {TIMEFRAMES.map(tf => (
-          <button key={tf} className={`tool-btn${timeframe === tf ? ' active' : ''}`} onClick={() => setTimeframe(tf)}>{tf}</button>
+          <button key={tf} className={`tool-btn${timeframe === tf ? ' active' : ''}`} onClick={() => {
+            if (tf === timeframe) return
+            // Remember current candle timestamp so we can restore position after TF change
+            if (replayMode && replayIndex > 0 && candles.length > 0) {
+              const curTime = candles[Math.min(replayIndex, candles.length) - 1]?.time
+              replayAnchorRef.current = curTime ?? null
+            }
+            setTimeframe(tf)
+          }}>{tf}</button>
         ))}
 
         <div className="toolbar-sep" />
@@ -440,6 +469,7 @@ export default function PracticePage() {
               onChartClick={handleChartClick}
               onUpdateOrder={handleUpdateOrder}
               onUpdateActiveOrder={handleUpdateActiveOrder}
+              onUpdateAwaitingFill={handleUpdateAwaitingFill}
               onTickPrice={handleTickPrice}
               drawingTool={drawingTool}
               magnetEnabled={magnetEnabled}
@@ -571,7 +601,19 @@ export default function PracticePage() {
                 {['LONG', 'SHORT'].map(side => (
                   <button
                     key={side}
-                    onClick={() => setOrderMode(orderMode === side ? null : side)}
+                    onClick={() => {
+                      if (orderType === 'market') {
+                        // Market: place immediately at current price, no chart click needed
+                        const entryPrice = livePrice ?? lastPrice
+                        if (entryPrice == null) return
+                        const stop = DEFAULT_STOP_PTS
+                        const tp = side === 'LONG' ? entryPrice + stop * 2 : entryPrice - stop * 2
+                        const sl = side === 'LONG' ? entryPrice - stop     : entryPrice + stop
+                        setPendingOrder({ side, orderType: 'market', entry: entryPrice, tp, sl })
+                      } else {
+                        setOrderMode(orderMode === side ? null : side)
+                      }
+                    }}
                     style={{
                       flex: 1, padding: '10px 6px', fontFamily: 'inherit',
                       border: `1px solid ${orderMode === side ? (side === 'LONG' ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)') : 'var(--border)'}`,
@@ -589,8 +631,7 @@ export default function PracticePage() {
               {orderMode && (
                 <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--muted)', textAlign: 'center' }}>
                   Click the chart to set{' '}
-                  {orderType === 'market' ? 'entry price'
-                    : orderType === 'limit' ? 'limit price'
+                  {orderType === 'limit' ? 'limit price'
                     : orderType === 'stop' ? 'stop trigger price'
                     : 'stop trigger price'}
                 </div>
