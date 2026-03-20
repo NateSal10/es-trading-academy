@@ -99,7 +99,10 @@ export default function AuthPage() {
                       onChange={e => setEmail(e.target.value)}
                       required
                       autoComplete="email"
-                      className="w-full backdrop-blur-[2px] text-white bg-white/5 border border-white/10 rounded-full py-3 px-5 focus:outline-none focus:border-white/30 placeholder:text-white/30"
+                      className="w-full rounded-full py-3 px-5 focus:outline-none"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(2px)' }}
+                      onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
                     <input
                       type="password"
@@ -109,7 +112,10 @@ export default function AuthPage() {
                       required
                       minLength={6}
                       autoComplete="current-password"
-                      className="w-full backdrop-blur-[2px] text-white bg-white/5 border border-white/10 rounded-full py-3 px-5 focus:outline-none focus:border-white/30 placeholder:text-white/30"
+                      className="w-full rounded-full py-3 px-5 focus:outline-none"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(2px)' }}
+                      onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
 
                     {error && (
@@ -176,7 +182,10 @@ export default function AuthPage() {
                       onChange={e => setEmail(e.target.value)}
                       required
                       autoComplete="email"
-                      className="w-full backdrop-blur-[2px] text-white bg-white/5 border border-white/10 rounded-full py-3 px-5 focus:outline-none focus:border-white/30 placeholder:text-white/30"
+                      className="w-full rounded-full py-3 px-5 focus:outline-none"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(2px)' }}
+                      onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
                     <input
                       type="password"
@@ -186,7 +195,10 @@ export default function AuthPage() {
                       required
                       minLength={6}
                       autoComplete="new-password"
-                      className="w-full backdrop-blur-[2px] text-white bg-white/5 border border-white/10 rounded-full py-3 px-5 focus:outline-none focus:border-white/30 placeholder:text-white/30"
+                      className="w-full rounded-full py-3 px-5 focus:outline-none"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(2px)' }}
+                      onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
 
                     {error && (
@@ -244,7 +256,10 @@ export default function AuthPage() {
                       onChange={e => setEmail(e.target.value)}
                       required
                       autoComplete="email"
-                      className="w-full backdrop-blur-[2px] text-white bg-white/5 border border-white/10 rounded-full py-3 px-5 focus:outline-none focus:border-white/30 placeholder:text-white/30"
+                      className="w-full rounded-full py-3 px-5 focus:outline-none"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(2px)' }}
+                      onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
 
                     {error && (
