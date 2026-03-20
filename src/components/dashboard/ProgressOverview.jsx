@@ -1,40 +1,14 @@
 import { format } from 'date-fns'
 import useStore from '../../store/index'
-import { CONCEPT_COUNT } from '../../data/conceptsData'
 
 export default function ProgressOverview() {
-  const completedConcepts = useStore(s => s.completedConcepts)
   const quizHistory = useStore(s => s.quizHistory)
-
-  const completed = completedConcepts.length
-  const total = CONCEPT_COUNT
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0
 
   const recentQuizzes = [...quizHistory].reverse().slice(0, 5)
 
   return (
     <div className="card">
       <div className="card-title">Learning Progress</div>
-
-      {/* Concepts progress */}
-      <div style={{ marginBottom: '14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
-          <span style={{ color: 'var(--muted)' }}>Concepts completed</span>
-          <span style={{ fontWeight: 600 }}>{completed} / {total}</span>
-        </div>
-        <div style={{ height: '6px', background: 'var(--bg3)', borderRadius: '3px', overflow: 'hidden' }}>
-          <div style={{
-            height: '100%',
-            width: `${pct}%`,
-            background: 'var(--accent)',
-            borderRadius: '3px',
-            transition: 'width 0.4s ease',
-          }} />
-        </div>
-        <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px', textAlign: 'right' }}>
-          {pct}% complete
-        </div>
-      </div>
 
       {/* Recent quiz history */}
       <div className="card-sub" style={{ marginBottom: '8px' }}>Recent Quizzes</div>

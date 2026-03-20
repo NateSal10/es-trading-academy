@@ -87,21 +87,8 @@ export default function ConceptsPage() {
     ? CONCEPT_META
     : CONCEPT_META.filter(c => c.category === activeCategory);
 
-  const totalDone = completedConcepts.filter(id => CONCEPT_META.find(c => c.id === id)).length;
-
   return (
     <div className="page">
-      {/* Progress bar */}
-      <div style={{ marginBottom: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>
-          <span>Concepts Progress</span>
-          <span style={{ color: 'var(--text)', fontWeight: 700 }}>{totalDone} / {CONCEPT_META.length}</span>
-        </div>
-        <div className="progress-bar-wrap">
-          <div className="progress-bar-fill" style={{ width: `${(totalDone / CONCEPT_META.length) * 100}%` }} />
-        </div>
-      </div>
-
       {/* Category filter */}
       <div className="cat-filter">
         {['All', ...CONCEPT_CATEGORIES].map(cat => (
