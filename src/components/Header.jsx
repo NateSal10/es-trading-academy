@@ -1,6 +1,6 @@
 import { useMarketStatus } from '../hooks/useMarketStatus';
 
-export default function Header() {
+export default function Header({ signOut, userEmail, synced }) {
   const { status: session, timeStr } = useMarketStatus();
   const sessionColor =
     session === 'RTH' ? 'var(--green-bright)' :
@@ -30,6 +30,21 @@ export default function Header() {
           </span>
           <span style={{ color: sessionColor, fontWeight: 600 }}>{session}</span>
         </div>
+
+        {userEmail && (
+          <>
+            <div style={{ width: '1px', height: '16px', background: 'var(--border)', flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {synced === false && (
+                <span style={{ fontSize: '10px', color: 'var(--amber-bright)' }}>syncing...</span>
+              )}
+              <span className="user-email">{userEmail}</span>
+              <button className="signout-btn" onClick={signOut}>
+                Sign Out
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
