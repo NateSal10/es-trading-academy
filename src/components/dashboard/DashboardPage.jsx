@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import useStore from '../../store/index'
 import SessionClock from './SessionClock'
 import useCountUp from '../../hooks/useCountUp'
@@ -260,6 +260,218 @@ function RecentTrades({ trades }) {
   )
 }
 
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+
+function TradeCalendar({ trades, dailyPnL }) {
+  const today = new Date()
+  const [year,  setYear]  = useState(today.getFullYear())
+  const [month, setMonth] = useState(today.getMonth()) // 0-indexed
+  const [tooltip, setTooltip] = useState(null) // { dateStr, x, y }
+  const calRef = useRef(null)
+
+  // Group trades by YYYY-MM-DD
+  const tradesByDay = useMemo(() => {
+    const map = {}
+    trades.forEach(t => {
+      const d = (t.date || '').split('T')[0]
+      if (!d) return
+      if (!map[d]) map[d] = []
+      map[d].push(t)
+    })
+    return map
+  }, [trades])
+
+  function prevMonth() {
+    if (month === 0) { setMonth(11); setYear(y => y - 1) }
+    else setMonth(m => m - 1)
+  }
+  function nextMonth() {
+    if (month === 11) { setMonth(0); setYear(y => y + 1) }
+    else setMonth(m => m + 1)
+  }
+
+  // Build calendar grid
+  const firstDay = new Date(year, month, 1).getDay() // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null) // empty padding
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  // Monthly totals
+  const monthDays = Object.keys(dailyPnL).filter(d => {
+    const [y, m] = d.split('-').map(Number)
+    return y === year && m - 1 === month
+  })
+  const monthPnL    = monthDays.reduce((s, d) => s + (dailyPnL[d] || 0), 0)
+  const monthTrades = trades.filter(t => {
+    const d = (t.date || '').split('T')[0]
+    const [y, m] = (d || '').split('-').map(Number)
+    return y === year && m - 1 === month
+  })
+  const monthWins   = monthTrades.filter(t => t.pnl > 0).length
+  const monthPnLColor = monthPnL > 0 ? '#22c55e' : monthPnL < 0 ? '#ef4444' : 'var(--muted)'
+
+  function handleDayEnter(e, dateStr) {
+    if (!tradesByDay[dateStr] && !dailyPnL[dateStr]) return
+    const rect = calRef.current?.getBoundingClientRect()
+    const cellRect = e.currentTarget.getBoundingClientRect()
+    setTooltip({
+      dateStr,
+      x: cellRect.left - (rect?.left ?? 0) + cellRect.width / 2,
+      y: cellRect.top  - (rect?.top  ?? 0),
+    })
+  }
+
+  const ttData = tooltip ? {
+    ts: tradesByDay[tooltip.dateStr] || [],
+    pnl: dailyPnL[tooltip.dateStr] || 0,
+  } : null
+
+  return (
+    <div ref={calRef} className="card" style={{ marginTop: '12px', position: 'relative' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: 600 }}>
+            Trade Calendar
+          </span>
+          {monthTrades.length > 0 && (
+            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+              {monthTrades.length} trade{monthTrades.length !== 1 ? 's' : ''} ·{' '}
+              {monthWins}W {monthTrades.length - monthWins}L ·{' '}
+              <span style={{ fontWeight: 700, fontFamily: 'monospace', color: monthPnLColor }}>
+                {monthPnL > 0 ? '+' : ''}{fmt$(monthPnL)}
+              </span>
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={prevMonth} style={{
+            padding: '4px 10px', background: 'var(--bg3)', border: '1px solid var(--border)',
+            borderRadius: '5px', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '13px',
+          }}>‹</button>
+          <span style={{ fontSize: '13px', fontWeight: 600, minWidth: '130px', textAlign: 'center' }}>
+            {MONTHS[month]} {year}
+          </span>
+          <button onClick={nextMonth} style={{
+            padding: '4px 10px', background: 'var(--bg3)', border: '1px solid var(--border)',
+            borderRadius: '5px', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '13px',
+          }}>›</button>
+        </div>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '3px', marginBottom: '3px' }}>
+        {DAYS.map(d => (
+          <div key={d} style={{ fontSize: '10px', color: 'var(--muted)', textAlign: 'center', fontWeight: 600, letterSpacing: '0.6px', padding: '4px 0' }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '3px' }}>
+        {cells.map((day, i) => {
+          if (day === null) return <div key={`e${i}`} />
+
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const pnl     = dailyPnL[dateStr]
+          const dayTrades = tradesByDay[dateStr] || []
+          const isToday = dateStr === todayStr
+          const hasTrades = !!pnl || dayTrades.length > 0
+          const wins  = dayTrades.filter(t => t.pnl > 0).length
+          const loss  = dayTrades.length - wins
+
+          const bg     = pnl == null ? 'var(--bg3)'
+                       : pnl > 0    ? `rgba(34,197,94,${Math.min(0.35, 0.07 + Math.abs(pnl) / 1500)})`
+                       : `rgba(239,68,68,${Math.min(0.35, 0.07 + Math.abs(pnl) / 1500)})`
+          const border = isToday    ? '1px solid var(--accent)'
+                       : pnl > 0   ? '1px solid rgba(34,197,94,0.3)'
+                       : pnl < 0   ? '1px solid rgba(239,68,68,0.3)'
+                       : '1px solid var(--border)'
+
+          return (
+            <div
+              key={dateStr}
+              onMouseEnter={e => handleDayEnter(e, dateStr)}
+              onMouseLeave={() => setTooltip(null)}
+              style={{
+                background: bg, border, borderRadius: '6px',
+                padding: '6px 5px 5px', minHeight: '64px',
+                cursor: hasTrades ? 'pointer' : 'default',
+                transition: 'filter 0.12s',
+              }}
+              onMouseOver={e => { if (hasTrades) e.currentTarget.style.filter = 'brightness(1.15)' }}
+              onFocus={e => { if (hasTrades) e.currentTarget.style.filter = 'brightness(1.15)' }}
+              onBlur={e => { e.currentTarget.style.filter = '' }}
+              onMouseOut={e => { e.currentTarget.style.filter = '' }}
+            >
+              {/* Date number */}
+              <div style={{ fontSize: '11px', fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--accent)' : 'var(--muted)', marginBottom: '3px' }}>
+                {day}
+              </div>
+
+              {/* P&L */}
+              {pnl != null && (
+                <div style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 700, lineHeight: 1.2,
+                  color: pnl > 0 ? '#22c55e' : '#ef4444' }}>
+                  {pnl > 0 ? '+' : ''}{fmt$(pnl)}
+                </div>
+              )}
+
+              {/* Trade count + W/L */}
+              {dayTrades.length > 0 && (
+                <div style={{ fontSize: '9px', color: 'var(--muted)', marginTop: '3px', lineHeight: 1.3 }}>
+                  {dayTrades.length}T · {wins}W{loss > 0 ? ` ${loss}L` : ''}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Tooltip */}
+      {tooltip && ttData && ttData.ts.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          left: Math.min(tooltip.x, 400),
+          top:  tooltip.y - 8,
+          transform: 'translate(-50%, -100%)',
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: '8px', padding: '10px 12px', zIndex: 100,
+          minWidth: '180px', maxWidth: '240px', pointerEvents: 'none',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+        }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, marginBottom: '6px', color: 'var(--text)' }}>
+            {tooltip.dateStr}
+            <span style={{ marginLeft: '8px', fontFamily: 'monospace', color: ttData.pnl >= 0 ? '#22c55e' : '#ef4444' }}>
+              {ttData.pnl > 0 ? '+' : ''}{fmt$(ttData.pnl)}
+            </span>
+          </div>
+          {ttData.ts.map((t, i) => (
+            <div key={i} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              fontSize: '11px', padding: '3px 0', borderTop: i > 0 ? '1px solid var(--border)' : 'none',
+            }}>
+              <span style={{ color: t.side === 'LONG' ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                {t.side === 'LONG' ? '▲' : '▼'} {(t.symbol || 'ES=F').replace('=F', '')}
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'monospace' }}>
+                {t.entry?.toFixed(1)} → {t.exit?.toFixed(1)}
+              </span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: t.pnl >= 0 ? '#22c55e' : '#ef4444' }}>
+                {t.pnl >= 0 ? '+' : ''}{fmt$(t.pnl)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const [mode, setMode] = useState('prop')
   const account      = useStore(s => s.account)
@@ -434,6 +646,9 @@ export default function DashboardPage() {
       ) : (
         <RecentTrades trades={trades} />
       )}
+
+      {/* Trade Calendar */}
+      <TradeCalendar trades={trades} dailyPnL={dailyPnL} />
     </div>
   )
 }
