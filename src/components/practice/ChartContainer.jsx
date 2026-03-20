@@ -6,6 +6,20 @@ import {
   CandlestickSeries,
 } from 'lightweight-charts'
 import useStore from '../../store'
+import { DrawingLayerPrimitive } from './drawingPrimitives'
+
+// Snap clicked price to the nearest OHLC value of the nearest candle (magnet mode)
+function snapToOHLC(candles, clickedTime, clickedPrice) {
+  if (!candles.length) return +clickedPrice.toFixed(2)
+  const nearest = candles.reduce((best, c) =>
+    Math.abs(c.time - clickedTime) < Math.abs(best.time - clickedTime) ? c : best
+  )
+  const ohlc = [nearest.open, nearest.high, nearest.low, nearest.close]
+  const snapped = ohlc.reduce((best, p) =>
+    Math.abs(p - clickedPrice) < Math.abs(best - clickedPrice) ? p : best
+  )
+  return +snapped.toFixed(2)
+}
 
 // ── SMC detection ─────────────────────────────────────────────────────────────
 // Detectors return ACTIVE (unmitigated/unswept) zones only.
@@ -109,12 +123,17 @@ class BoxZoneRenderer {
 
         const isBull = z.type === 'bull'
         const isOB   = !!z._ob
-        const fill   = isOB
-          ? (isBull ? 'rgba(251,146,60,0.08)'  : 'rgba(167,139,250,0.08)')
-          : (isBull ? 'rgba(34,197,94,0.08)'   : 'rgba(239,68,68,0.08)')
-        const border = isOB
-          ? (isBull ? 'rgba(251,146,60,0.55)'  : 'rgba(167,139,250,0.55)')
-          : (isBull ? 'rgba(34,197,94,0.45)'   : 'rgba(239,68,68,0.45)')
+        const isBR   = !!z._brStrategy
+        const fill   = isBR
+          ? 'rgba(250,204,21,0.06)'
+          : isOB
+            ? (isBull ? 'rgba(251,146,60,0.08)'  : 'rgba(167,139,250,0.08)')
+            : (isBull ? 'rgba(34,197,94,0.08)'   : 'rgba(239,68,68,0.08)')
+        const border = isBR
+          ? 'rgba(250,204,21,0.50)'
+          : isOB
+            ? (isBull ? 'rgba(251,146,60,0.55)'  : 'rgba(167,139,250,0.55)')
+            : (isBull ? 'rgba(34,197,94,0.45)'   : 'rgba(239,68,68,0.45)')
 
         ctx.fillStyle = fill
         ctx.fillRect(startX, y, w, h)
@@ -123,6 +142,17 @@ class BoxZoneRenderer {
         ctx.lineWidth = 1
         ctx.setLineDash([4, 3])
         ctx.strokeRect(startX + 0.5, y + 0.5, w, h)
+        ctx.setLineDash([])
+
+        // Midpoint dashed line through box center
+        const midY = y + h / 2
+        ctx.strokeStyle = border
+        ctx.lineWidth = 1
+        ctx.setLineDash([6, 4])
+        ctx.beginPath()
+        ctx.moveTo(startX, midY)
+        ctx.lineTo(endX, midY)
+        ctx.stroke()
         ctx.setLineDash([])
 
         // Label inside the box
@@ -329,13 +359,19 @@ export default function ChartContainer({
   onUpdateOrder,        // ({ tp?, sl? }) => void  — updates pendingOrder
   onUpdateActiveOrder,  // ({ tp?, sl? }) => void  — updates activeOrder
   onTickPrice,          // (price: number) => void — called on each tick with simulated close
+  drawingTool,          // null | 'hline' | 'line' | 'box'
+  magnetEnabled,        // boolean — snap clicks to OHLC
+  onDrawingDone,        // () => void — called after a drawing is placed
 }) {
   const mainElRef   = useRef(null)
   const chartRef    = useRef(null)
   const seriesRef   = useRef({})
-  const fvgPrimRef     = useRef(null)
-  const obPrimRef      = useRef(null)
-  const sessionPrimRef = useRef(null)
+  const fvgPrimRef        = useRef(null)
+  const obPrimRef         = useRef(null)
+  const sessionPrimRef    = useRef(null)
+  const drawingPrimRef    = useRef(null)
+  const brStrategyPrimRef = useRef(null)
+  const drawStartRef      = useRef(null)   // { time, price } — first click of line/box
   const orderLinesRef  = useRef({ entry: null, tp: null, sl: null, trigger: null })
   const draggingRef    = useRef(null)
   const pendingOrderRef = useRef(pendingOrder)
@@ -343,7 +379,9 @@ export default function ChartContainer({
   const tickRef              = useRef({ close: null, high: null, low: null, barTime: null })
   const activeOrderRef       = useRef(activeOrder)
   const onUpdateActiveOrderRef = useRef(onUpdateActiveOrder)
-  const onTickPriceRef = useRef(onTickPrice)
+  const onTickPriceRef   = useRef(onTickPrice)
+  const addDrawingRef    = useRef(null)
+  const onDrawingDoneRef = useRef(null)
   const [hoverLine, setHoverLine] = useState(null)   // 'tp' | 'sl' | null — for cursor
   const [dragDisplay, setDragDisplay] = useState(null) // { pts, dollars, y } — shown while dragging
 
@@ -397,12 +435,16 @@ export default function ChartContainer({
     })
 
     // Attach SMC box primitives + session band primitive to the candle series
-    fvgPrimRef.current     = new BoxZonePrimitive()
-    obPrimRef.current      = new BoxZonePrimitive()
-    sessionPrimRef.current = new VerticalBandPrimitive()
+    fvgPrimRef.current      = new BoxZonePrimitive()
+    obPrimRef.current       = new BoxZonePrimitive()
+    sessionPrimRef.current  = new VerticalBandPrimitive()
+    brStrategyPrimRef.current = new BoxZonePrimitive()
+    drawingPrimRef.current  = new DrawingLayerPrimitive()
     seriesRef.current.candles.attachPrimitive(fvgPrimRef.current)
     seriesRef.current.candles.attachPrimitive(obPrimRef.current)
     seriesRef.current.candles.attachPrimitive(sessionPrimRef.current)
+    seriesRef.current.candles.attachPrimitive(brStrategyPrimRef.current)
+    seriesRef.current.candles.attachPrimitive(drawingPrimRef.current)
 
     const ro = new ResizeObserver(() => {
       if (mainElRef.current) chart.applyOptions({ width: mainElRef.current.clientWidth, height: mainElRef.current.clientHeight || 420 })
@@ -415,22 +457,56 @@ export default function ChartContainer({
     }
   }, [])
 
-  // ── Chart click → place order ────────────────────────────────────────────────
+  // ── Chart click → place order OR drawing ────────────────────────────────────
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
 
     const handler = (param) => {
-      if (!param.point || !onChartClick) return
-      // Only fire when in order placement mode
-      if (!orderMode) return
-      const price = seriesRef.current.candles?.coordinateToPrice(param.point.y)
-      if (price != null) onChartClick(+price.toFixed(2))
+      if (!param.point) return
+      const cs = seriesRef.current.candles
+      if (!cs) return
+      const rawPrice = cs.coordinateToPrice(param.point.y)
+      if (rawPrice == null) return
+
+      // Drawing tool takes priority over order mode
+      if (drawingTool) {
+        const snappedPrice = magnetEnabled
+          ? snapToOHLC(visibleCandlesRef.current, param.time, rawPrice)
+          : +rawPrice.toFixed(2)
+        const snappedTime = param.time
+
+        if (drawingTool === 'hline') {
+          addDrawingRef.current?.({ id: crypto.randomUUID(), type: 'hline', price: snappedPrice, color: '#4f8ef7' })
+          onDrawingDoneRef.current?.()
+        } else {
+          // line or box: need two clicks
+          if (!drawStartRef.current) {
+            drawStartRef.current = { time: snappedTime, price: snappedPrice }
+          } else {
+            addDrawingRef.current?.({
+              id: crypto.randomUUID(),
+              type: drawingTool,
+              p1: drawStartRef.current,
+              p2: { time: snappedTime, price: snappedPrice },
+              color: '#4f8ef7',
+            })
+            drawStartRef.current = null
+            drawingPrimRef.current?.setPreview(null)
+            onDrawingDoneRef.current?.()
+          }
+        }
+        return
+      }
+
+      // Existing order placement logic
+      if (!orderMode || !onChartClick) return
+      onChartClick(+rawPrice.toFixed(2))
     }
 
     chart.subscribeClick(handler)
     return () => chart.unsubscribeClick(handler)
-  }, [orderMode, onChartClick])
+  }, [orderMode, onChartClick, drawingTool, magnetEnabled])
 
   // ── Order price lines (pending & active) ──────────────────────────────────
   useEffect(() => {
@@ -532,11 +608,24 @@ export default function ChartContainer({
   }, [pendingOrder?.tp, pendingOrder?.sl, pendingOrder?.entry, pendingOrder?.stopTrigger, activeOrder?.tp, activeOrder?.sl])
 
   // Keep refs in sync so document listeners always see fresh values
-  useEffect(() => { pendingOrderRef.current       = pendingOrder       }, [pendingOrder])
-  useEffect(() => { onUpdateOrderRef.current      = onUpdateOrder      }, [onUpdateOrder])
-  useEffect(() => { activeOrderRef.current        = activeOrder        }, [activeOrder])
+  useEffect(() => { pendingOrderRef.current        = pendingOrder        }, [pendingOrder])
+  useEffect(() => { onUpdateOrderRef.current       = onUpdateOrder       }, [onUpdateOrder])
+  useEffect(() => { activeOrderRef.current         = activeOrder         }, [activeOrder])
   useEffect(() => { onUpdateActiveOrderRef.current = onUpdateActiveOrder }, [onUpdateActiveOrder])
-  useEffect(() => { onTickPriceRef.current = onTickPrice }, [onTickPrice])
+  useEffect(() => { onTickPriceRef.current    = onTickPrice    }, [onTickPrice])
+  useEffect(() => { onDrawingDoneRef.current  = onDrawingDone  }, [onDrawingDone])
+
+  // Keep addDrawing ref in sync from store
+  const addDrawingFn = useStore(s => s.addDrawing)
+  useEffect(() => { addDrawingRef.current = addDrawingFn }, [addDrawingFn])
+
+  // Reset first-click state when drawing tool is cleared
+  useEffect(() => {
+    if (!drawingTool) {
+      drawStartRef.current = null
+      drawingPrimRef.current?.setPreview(null)
+    }
+  }, [drawingTool])
 
   // Always-current ref to visible candles — lets the tick interval read the
   // latest bar without needing visibleCandles in its dependency array (which
@@ -673,8 +762,42 @@ export default function ChartContainer({
   }, []) // no deps — uses refs only
 
   // Hover detection: change cursor when near any draggable TP/SL line
+  // Also drives drawing preview ghost when placing a line/box second point
+  const drawingToolRef   = useRef(drawingTool)
+  const magnetEnabledRef = useRef(magnetEnabled)
+  useEffect(() => { drawingToolRef.current   = drawingTool   }, [drawingTool])
+  useEffect(() => { magnetEnabledRef.current = magnetEnabled }, [magnetEnabled])
+
   const handleMouseMove = useCallback((e) => {
     if (draggingRef.current) return
+
+    // Drawing preview: when a line/box first point is set, show ghost
+    const tool = drawingToolRef.current
+    if ((tool === 'line' || tool === 'box') && drawStartRef.current) {
+      const cs = seriesRef.current.candles
+      const chart = chartRef.current
+      if (cs && chart) {
+        const rect = mainElRef.current?.getBoundingClientRect()
+        if (rect) {
+          const relX = e.clientX - rect.left
+          const relY = e.clientY - rect.top
+          const hoveredTime  = chart.timeScale().coordinateToTime(relX)
+          const hoveredPrice = cs.coordinateToPrice(relY)
+          if (hoveredTime != null && hoveredPrice != null) {
+            const snappedPrice = magnetEnabledRef.current
+              ? snapToOHLC(visibleCandlesRef.current, hoveredTime, hoveredPrice)
+              : +hoveredPrice.toFixed(2)
+            drawingPrimRef.current?.setPreview({
+              type: tool,
+              p1: drawStartRef.current,
+              p2: { time: hoveredTime, price: snappedPrice },
+              color: 'rgba(79,142,247,0.8)',
+            })
+          }
+        }
+      }
+    }
+
     const order = pendingOrderRef.current || activeOrderRef.current
     if (!order || !seriesRef.current.candles) { setHoverLine(null); return }
 
@@ -766,7 +889,63 @@ export default function ChartContainer({
     )
   }, [visibleCandles, sessions])
 
-  const cursor = orderMode ? 'crosshair' : hoverLine ? 'ns-resize' : 'default'
+  // ── User drawings overlay ─────────────────────────────────────────────────────
+  const drawings = useStore(s => s.drawings)
+  useEffect(() => {
+    drawingPrimRef.current?.updateDrawings(drawings)
+  }, [drawings])
+
+  // ── 15-min B&R strategy box ───────────────────────────────────────────────────
+  const brStrategy = useStore(s => s.brStrategy)
+  useEffect(() => {
+    if (!brStrategy) { brStrategyPrimRef.current?.updateZones([]); return }
+
+    const etDates = [...new Set(visibleCandles.map(c =>
+      new Date(c.time * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+    ))].reverse()
+
+    let brBox = null
+    for (const dateStr of etDates) {
+      const [y, m, d] = dateStr.split('-').map(Number)
+
+      // Derive actual ET UTC offset for DST correctness
+      const refDate = new Date(Date.UTC(y, m - 1, d, 13, 0, 0))
+      const tzPart = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', timeZoneName: 'shortOffset',
+      }).formatToParts(refDate).find(p => p.type === 'timeZoneName').value
+      const etOffsetHours = parseInt(tzPart.replace('GMT', '') || '0')
+      const etOffsetSecs = -etOffsetHours * 3600
+
+      const start800 = Math.floor(Date.UTC(y, m - 1, d, 8, 0, 0) / 1000) + etOffsetSecs
+      const start815 = Math.floor(Date.UTC(y, m - 1, d, 8, 15, 0) / 1000) + etOffsetSecs
+
+      const windowCandles = visibleCandles.filter(c => c.time >= start800 && c.time < start815)
+      if (windowCandles.length > 0) {
+        brBox = {
+          top: Math.max(...windowCandles.map(c => c.high)),
+          bot: Math.min(...windowCandles.map(c => c.low)),
+          startTime: windowCandles[0].time,
+        }
+        break
+      }
+
+      // Fallback for large timeframes: candle that contains 8:00 AM ET
+      const containing = [...visibleCandles]
+        .filter(c => c.time <= start800)
+        .sort((a, b) => b.time - a.time)[0]
+      if (containing) {
+        brBox = { top: containing.high, bot: containing.low, startTime: containing.time }
+        break
+      }
+    }
+
+    brStrategyPrimRef.current?.updateZones(brBox ? [{
+      type: 'bull', top: brBox.top, bot: brBox.bot,
+      startTime: brBox.startTime, label: 'B&R 8AM', _brStrategy: true,
+    }] : [])
+  }, [visibleCandles, brStrategy])
+
+  const cursor = (drawingTool || orderMode) ? 'crosshair' : hoverLine ? 'ns-resize' : 'default'
 
   return (
     <div

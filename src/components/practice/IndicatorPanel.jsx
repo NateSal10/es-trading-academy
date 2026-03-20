@@ -44,10 +44,12 @@ function SmallToggle({ checked, onChange, color, label }) {
 }
 
 export default function IndicatorPanel() {
-  const smcLayers   = useStore(s => s.smcLayers)
-  const setSMCLayer = useStore(s => s.setSMCLayer)
-  const sessions    = useStore(s => s.sessions)
-  const setSession  = useStore(s => s.setSession)
+  const smcLayers    = useStore(s => s.smcLayers)
+  const setSMCLayer  = useStore(s => s.setSMCLayer)
+  const sessions     = useStore(s => s.sessions)
+  const setSession   = useStore(s => s.setSession)
+  const brStrategy   = useStore(s => s.brStrategy)
+  const setBrStrategy = useStore(s => s.setBrStrategy)
 
   return (
     <div className="side-panel">
@@ -93,6 +95,24 @@ export default function IndicatorPanel() {
             )}
           </div>
         ))}
+      </div>
+
+      {/* Strategies */}
+      <div className="panel-section">
+        <div className="panel-title">Strategies</div>
+        <div className="indicator-row">
+          <span className="indicator-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{
+              width: '10px', height: '10px', borderRadius: '2px',
+              background: '#facc15', display: 'inline-block', flexShrink: 0,
+            }} />
+            15m B&amp;R
+          </span>
+          <Toggle checked={brStrategy} onChange={e => setBrStrategy(e.target.checked)} color="#facc15" />
+        </div>
+        <div style={{ paddingLeft: '16px', fontSize: '9px', color: 'var(--muted)', lineHeight: 1.4, marginTop: '-4px' }}>
+          Boxes 8:00–8:15 AM ET range on any timeframe
+        </div>
       </div>
 
     </div>

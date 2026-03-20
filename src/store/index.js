@@ -95,6 +95,14 @@ const useStore = create(
       sessions: { asia: false, london: false, ny: false, asiaHL: false, londonHL: false, nyHL: false },
       setSession: (key, val) => set(s => ({ sessions: { ...s.sessions, [key]: val } })),
 
+      // Magnet / snap to OHLC
+      magnetEnabled: false,
+      setMagnetEnabled: (val) => set({ magnetEnabled: val }),
+
+      // 15m Break & Retest strategy box
+      brStrategy: false,
+      setBrStrategy: (val) => set({ brStrategy: val }),
+
       // Drawings (persisted)
       drawings: [],
       addDrawing: (drawing) => set(s => ({ drawings: [...s.drawings, drawing] })),
@@ -159,6 +167,8 @@ const useStore = create(
         indicators: s.indicators,
         smcLayers: s.smcLayers,
         sessions: s.sessions,
+        magnetEnabled: s.magnetEnabled,
+        brStrategy: s.brStrategy,
         paperAccount: s.paperAccount,
       }),
     }

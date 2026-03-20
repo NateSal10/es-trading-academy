@@ -48,6 +48,7 @@ export default function PracticePage() {
   const [replayIndex, setReplayIndex] = useState(0)
   const [playing,     setPlaying]     = useState(false)
   const [speed,       setSpeed]       = useState(1)
+  const [drawingTool, setDrawingTool] = useState(null)  // null | 'hline' | 'line' | 'box'
 
   // Account mode
   const [accountMode,     setAccountMode]     = useState('prop')
@@ -71,6 +72,9 @@ export default function PracticePage() {
   const resetPaperAccount       = useStore(s => s.resetPaperAccount)
   const resetAccount            = useStore(s => s.resetAccount)
   const setPaperStartingBalance = useStore(s => s.setPaperStartingBalance)
+  const magnetEnabled           = useStore(s => s.magnetEnabled)
+  const setMagnetEnabled        = useStore(s => s.setMagnetEnabled)
+  const clearDrawings           = useStore(s => s.clearDrawings)
 
   const DEFAULT_STOP_PTS = 10
 
@@ -334,6 +338,39 @@ export default function PracticePage() {
 
         <div className="toolbar-sep" />
 
+        <button
+          className={`tool-btn${drawingTool === 'hline' ? ' active' : ''}`}
+          title="Horizontal Line — click chart to place"
+          onClick={() => setDrawingTool(t => t === 'hline' ? null : 'hline')}
+        >&#x2500; H-Line</button>
+
+        <button
+          className={`tool-btn${drawingTool === 'line' ? ' active' : ''}`}
+          title="Trend Line — click two points"
+          onClick={() => setDrawingTool(t => t === 'line' ? null : 'line')}
+        >&#x2571; Line</button>
+
+        <button
+          className={`tool-btn${drawingTool === 'box' ? ' active' : ''}`}
+          title="Rectangle — click two corners"
+          onClick={() => setDrawingTool(t => t === 'box' ? null : 'box')}
+        >&#x25A1; Box</button>
+
+        <button
+          className={`tool-btn${magnetEnabled ? ' active' : ''}`}
+          title="Snap to OHLC"
+          onClick={() => setMagnetEnabled(!magnetEnabled)}
+        >&#x2295; Snap</button>
+
+        <button
+          className="tool-btn"
+          title="Clear all drawings"
+          style={{ color: 'var(--muted)' }}
+          onClick={() => { if (window.confirm('Clear all drawings?')) clearDrawings() }}
+        >&#x2715; Clear</button>
+
+        <div className="toolbar-sep" />
+
         <button className={`tool-btn${replayMode ? ' active' : ''}`} onClick={toggleReplay}>
           {replayMode ? '■ Exit Replay' : '▶ Replay'}
         </button>
@@ -404,6 +441,9 @@ export default function PracticePage() {
               onUpdateOrder={handleUpdateOrder}
               onUpdateActiveOrder={handleUpdateActiveOrder}
               onTickPrice={handleTickPrice}
+              drawingTool={drawingTool}
+              magnetEnabled={magnetEnabled}
+              onDrawingDone={() => setDrawingTool(null)}
             />
           </div>
 
