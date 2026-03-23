@@ -6,6 +6,7 @@ import DashboardPage from './components/dashboard/DashboardPage';
 import ConceptsPage from './components/concepts/ConceptsPage';
 import PracticePage from './components/practice/PracticePage';
 import GlossaryPage from './components/glossary/GlossaryPage';
+import BacktestPage from './components/backtest/BacktestPage';
 import AuthPage from './components/auth/AuthPage';
 import MigrationPrompt from './components/auth/MigrationPrompt';
 import { useAuth } from './hooks/useAuth';
@@ -85,6 +86,7 @@ export default function App() {
       <div style={{ display: tab === 'practice' ? 'contents' : 'none' }}>
         <PracticePage />
       </div>
+      {tab === 'backtest'    && <BacktestPage />}
       {tab === 'glossary'    && <GlossaryPage />}
     </>
   );

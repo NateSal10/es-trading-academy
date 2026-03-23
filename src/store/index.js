@@ -7,6 +7,21 @@ import {
   cancelAllTimers,
 } from './sync'
 
+// Helper: downsample equity curve to maxPoints for storage
+function downsampleCurve(curve, maxPoints) {
+  if (!curve || curve.length <= maxPoints) return curve
+  const step = curve.length / maxPoints
+  const result = []
+  for (let i = 0; i < maxPoints; i++) {
+    result.push(curve[Math.floor(i * step)])
+  }
+  // Always include the last point
+  if (result[result.length - 1] !== curve[curve.length - 1]) {
+    result.push(curve[curve.length - 1])
+  }
+  return result
+}
+
 // Helper: get settings-related fields for sync
 const getSettingsPayload = (s) => ({
   indicators: s.indicators,
@@ -239,6 +254,31 @@ const useStore = create(
         if (s._userId) syncSettings(s._userId, getSettingsPayload(s))
       },
 
+      // ─── BACKTEST HISTORY ──────────────────────────────────────────
+      backtestHistory: [],
+      saveBacktestResult: (result) => {
+        const entry = {
+          id: crypto.randomUUID(),
+          date: new Date().toISOString(),
+          strategyId: result.strategyId,
+          strategyName: result.strategyName,
+          symbol: result.symbol,
+          timeframe: result.timeframe,
+          params: result.params,
+          metrics: result.metrics,
+          trades: result.trades,
+          // Downsample equity curve to max 200 points
+          equityCurve: downsampleCurve(result.equityCurve, 200),
+        }
+        set(s => ({
+          backtestHistory: [entry, ...s.backtestHistory].slice(0, 50),
+        }))
+      },
+      deleteBacktestResult: (id) => set(s => ({
+        backtestHistory: s.backtestHistory.filter(r => r.id !== id),
+      })),
+      clearBacktestHistory: () => set({ backtestHistory: [] }),
+
       // Paper trading account
       paperAccount: { startingBalance: 10000, balance: 10000, trades: [] },
       setPaperStartingBalance: (bal) => {
@@ -311,6 +351,7 @@ const useStore = create(
         magnetEnabled: s.magnetEnabled,
         brStrategy: s.brStrategy,
         paperAccount: s.paperAccount,
+        backtestHistory: s.backtestHistory,
       }),
     }
   )

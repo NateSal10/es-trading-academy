@@ -4,11 +4,13 @@ import {
   CandlestickChart,
   BookOpen,
   BookText,
+  FlaskConical,
 } from 'lucide-react'
 
 const TABS = [
   { id: 'dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
   { id: 'practice',    label: 'Practice',     icon: CandlestickChart },
+  { id: 'backtest',    label: 'Backtest',     icon: FlaskConical },
   { id: 'concepts',    label: 'Learn',        icon: BookOpen },
   { id: 'glossary',    label: 'Glossary',     icon: BookText },
 ]
