@@ -1,216 +1,196 @@
 import { toET } from './strategyInterface.js';
 import { detectSwingPoints } from '../smcDetectors.js';
 
+/**
+ * ICT Silver Bullet Strategy
+ *
+ * Rules (per ICT methodology):
+ * 1. Trade only during 10:00-11:00 AM or 2:00-3:00 PM ET windows
+ * 2. Wait for a liquidity sweep: price wicks through a recent swing H/L and reverses
+ * 3. After the sweep, look for a displacement move (strong impulse candle) = MSS
+ * 4. Identify the FVG created by that impulse
+ * 5. Enter when price retraces into the FVG
+ * 6. SL: below/above the swept level; TP: next opposing liquidity pool or R:R multiple
+ */
 export const ictSilverBullet = {
   id: 'ict_silver_bullet',
   name: 'ICT Silver Bullet',
   description:
-    'Trades liquidity sweeps followed by FVG retests during the 10-11 AM and 2-3 PM ET windows.',
+    'Liquidity sweep → displacement impulse → FVG retest entry. Trades the 10-11 AM & 2-3 PM ET kill zones.',
   category: 'structure',
 
   params: {
-    minRR: { label: 'Min R:R', type: 'number', default: 1.5, min: 1, max: 5, step: 0.5 },
-    maxTradesPerDay: { label: 'Max Trades/Day', type: 'number', default: 1, min: 1, max: 3 },
-    swingLookback: { label: 'Swing Lookback', type: 'number', default: 5, min: 3, max: 10 },
-    sweepBarsBack: { label: 'Sweep Detection Bars', type: 'number', default: 20, min: 5, max: 50 },
+    minRR:          { label: 'Min R:R',            type: 'number', default: 1.5, min: 1, max: 5, step: 0.5 },
+    rrTarget:       { label: 'R:R Target (TP)',     type: 'number', default: 2,   min: 1, max: 10, step: 0.5 },
+    maxTradesPerDay:{ label: 'Max Trades/Day',      type: 'number', default: 1,   min: 1, max: 3 },
+    swingLookback:  { label: 'Swing Lookback (bars)',type: 'number', default: 5,  min: 3, max: 15 },
+    sweepBarsBack:  { label: 'Sweep Lookback (bars)',type: 'number', default: 30, min: 10, max: 100 },
+    fvgExpiryBars:  { label: 'FVG Expiry (bars)',   type: 'number', default: 20,  min: 5, max: 50 },
   },
 
   initialize(candles, params) {
     const swingLookback = params.swingLookback ?? 5;
-    const swings = detectSwingPoints(candles, swingLookback);
-
-    // Build sorted liquidity levels for TP targeting
-    const allLevels = [
-      ...swings.highs.map((s) => ({ price: s.price, type: 'high', index: s.index })),
-      ...swings.lows.map((s) => ({ price: s.price, type: 'low', index: s.index })),
-    ].sort((a, b) => a.price - b.price);
-
+    const { highs, lows } = detectSwingPoints(candles, swingLookback);
     return {
-      swings,
-      allLevels,
+      swingHighs: highs,
+      swingLows: lows,
       tradesToday: new Map(),
-      pendingSweep: null,
-      pendingFVG: null,
+      // Active setup: { side, sweptLevel, fvg: { top, bot, midHigh, midLow, formBar } }
+      activeSetup: null,
     };
   },
 
   onBar(bar, index, candles, context, params) {
     const {
       minRR = 1.5,
+      rrTarget = 2,
       maxTradesPerDay = 1,
-      sweepBarsBack = 20,
+      sweepBarsBack = 30,
+      fvgExpiryBars = 20,
     } = params;
 
     const et = toET(bar.time);
-    const barMinutes = et.hours * 60 + et.minutes;
+    const barMin = et.hours * 60 + et.minutes;
     const dateStr = et.dateStr;
 
-    // Only trade in Silver Bullet windows: 10:00-11:00 AM or 2:00-3:00 PM ET
-    const inWindow =
-      (barMinutes >= 600 && barMinutes < 660) ||  // 10:00-11:00
-      (barMinutes >= 840 && barMinutes < 900);    // 14:00-15:00
+    const inAMWindow = barMin >= 600 && barMin < 660;   // 10:00-11:00 AM
+    const inPMWindow = barMin >= 840 && barMin < 900;   // 2:00-3:00 PM
+    const inWindow   = inAMWindow || inPMWindow;
 
-    if (!inWindow) {
-      // Reset pending state outside windows
-      context.pendingSweep = null;
-      context.pendingFVG = null;
-      return null;
+    // Clear stale setups at start of new day
+    const lastDate = context._lastDate;
+    if (lastDate && lastDate !== dateStr) {
+      context.activeSetup = null;
     }
+    context._lastDate = dateStr;
 
-    // Check max trades per day
     const tradesUsed = context.tradesToday.get(dateStr) || 0;
     if (tradesUsed >= maxTradesPerDay) return null;
+    if (index < 5) return null;
 
-    // Need enough history
-    if (index < sweepBarsBack + 3) return null;
-
-    const { swings, allLevels } = context;
-
-    // Step 1: Detect liquidity sweep if we don't have a pending one
-    if (!context.pendingSweep) {
-      const recentSwingHighs = swings.highs.filter(
-        (s) => s.index < index && index - s.index <= sweepBarsBack
+    // ── Step 1: Inside the window, look for a liquidity sweep ──────────────
+    if (inWindow && !context.activeSetup) {
+      const recentHighs = context.swingHighs.filter(
+        s => s.index < index && index - s.index <= sweepBarsBack
       );
-      const recentSwingLows = swings.lows.filter(
-        (s) => s.index < index && index - s.index <= sweepBarsBack
+      const recentLows = context.swingLows.filter(
+        s => s.index < index && index - s.index <= sweepBarsBack
       );
 
-      // Bearish sweep: price wicked above swing high but closed below it
-      for (const sh of recentSwingHighs) {
+      // Bearish sweep: wick above a swing high, close back below it
+      for (const sh of recentHighs) {
         if (bar.high > sh.price && bar.close < sh.price) {
-          context.pendingSweep = { side: 'SHORT', level: sh.price, bar: index };
+          context.activeSetup = {
+            side: 'SHORT',
+            sweptLevel: sh.price,
+            sweepBar: index,
+            fvg: null,
+          };
           break;
         }
       }
 
-      // Bullish sweep: price wicked below swing low but closed above it
-      if (!context.pendingSweep) {
-        for (const sl of recentSwingLows) {
+      // Bullish sweep: wick below a swing low, close back above it
+      if (!context.activeSetup) {
+        for (const sl of recentLows) {
           if (bar.low < sl.price && bar.close > sl.price) {
-            context.pendingSweep = { side: 'LONG', level: sl.price, bar: index };
+            context.activeSetup = {
+              side: 'LONG',
+              sweptLevel: sl.price,
+              sweepBar: index,
+              fvg: null,
+            };
             break;
           }
         }
       }
-
-      return null; // Wait for FVG after sweep
     }
 
-    // Step 2: Detect FVG formation after sweep
-    if (!context.pendingFVG && index >= 2) {
-      const prev2 = candles[index - 2];
-      const prev1 = candles[index - 1];
-      const curr = bar;
-
-      if (context.pendingSweep.side === 'LONG') {
-        // Bullish FVG: gap between prev2.high and curr.low
-        if (prev2.high < curr.low) {
-          context.pendingFVG = {
-            top: curr.low,
-            bot: prev2.high,
-            midHigh: prev1.high,
-            midLow: prev1.low,
-            formBar: index,
-          };
-        }
-      } else {
-        // Bearish FVG: gap between curr.high and prev2.low
-        if (prev2.low > curr.high) {
-          context.pendingFVG = {
-            top: prev2.low,
-            bot: curr.high,
-            midHigh: prev1.high,
-            midLow: prev1.low,
-            formBar: index,
-          };
-        }
-      }
-
-      return null; // Wait for retest
-    }
-
-    // Step 3: FVG retest entry
-    if (context.pendingSweep && context.pendingFVG) {
-      const sweep = context.pendingSweep;
-      const fvg = context.pendingFVG;
-
-      // Expire if too many bars have passed since FVG (stale setup)
-      if (index - fvg.formBar > 15) {
-        context.pendingSweep = null;
-        context.pendingFVG = null;
+    // ── Step 2: After sweep, look for displacement FVG ─────────────────────
+    if (context.activeSetup && !context.activeSetup.fvg && index >= 2) {
+      const setup = context.activeSetup;
+      // Expire setup if too old
+      if (index - setup.sweepBar > fvgExpiryBars) {
+        context.activeSetup = null;
         return null;
       }
 
-      if (sweep.side === 'LONG') {
-        // Bullish: price retraces down into FVG zone
-        if (bar.low <= fvg.top && bar.close > fvg.bot) {
-          const entry = fvg.top; // Enter at top of FVG
-          const sl = fvg.midLow - 0.5; // Below FVG candle's low
+      const c0 = candles[index - 2]; // oldest of 3-bar sequence
+      const c1 = candles[index - 1]; // impulse (displacement) candle
+      const c2 = bar;                 // current bar
 
-          // TP: next swing high above entry
-          const tpLevel = findNextLevel(allLevels, entry, 'above');
-          if (!tpLevel) {
-            context.pendingSweep = null;
-            context.pendingFVG = null;
-            return null;
-          }
+      // Bullish FVG: c0.high < c2.low (gap), c1 is a strong up candle
+      if (setup.side === 'LONG' && c0.high < c2.low) {
+        const impulseSize = c1.close - c1.open;
+        if (impulseSize > 0) { // c1 must be bullish
+          setup.fvg = {
+            top: c2.low,
+            bot: c0.high,
+            slLevel: setup.sweptLevel - 0.25, // SL below the swept low
+            formBar: index,
+          };
+        }
+      }
 
-          const tp = tpLevel.price;
-          const risk = entry - sl;
-          const reward = tp - entry;
+      // Bearish FVG: c0.low > c2.high, c1 is a strong down candle
+      if (setup.side === 'SHORT' && c0.low > c2.high) {
+        const impulseSize = c1.open - c1.close;
+        if (impulseSize > 0) { // c1 must be bearish
+          setup.fvg = {
+            top: c0.low,
+            bot: c2.high,
+            slLevel: setup.sweptLevel + 0.25, // SL above the swept high
+            formBar: index,
+          };
+        }
+      }
+      return null;
+    }
 
-          if (risk <= 0 || reward / risk < minRR) {
-            context.pendingSweep = null;
-            context.pendingFVG = null;
-            return null;
-          }
+    // ── Step 3: FVG retest entry ────────────────────────────────────────────
+    if (context.activeSetup?.fvg) {
+      const setup = context.activeSetup;
+      const { fvg } = setup;
 
+      // Expire stale FVG
+      if (index - fvg.formBar > fvgExpiryBars) {
+        context.activeSetup = null;
+        return null;
+      }
+
+      const midFVG = (fvg.top + fvg.bot) / 2;
+
+      if (setup.side === 'LONG') {
+        // Price retraces into the FVG (bar low dips into zone) and closes bullish
+        if (bar.low <= fvg.top && bar.low >= fvg.bot - (fvg.top - fvg.bot) && bar.close > midFVG) {
+          const entry = Math.max(bar.close, fvg.bot); // enter at close or FVG bottom
+          const sl    = fvg.slLevel;
+          const risk  = entry - sl;
+          if (risk <= 0) { context.activeSetup = null; return null; }
+          const tp = entry + risk * rrTarget;
+
+          // Skip if R:R to a natural target isn't good enough (already filtered by rrTarget)
           context.tradesToday.set(dateStr, tradesUsed + 1);
-          context.pendingSweep = null;
-          context.pendingFVG = null;
-
+          context.activeSetup = null;
           return {
-            side: 'LONG',
-            entry,
-            sl,
-            tp,
-            reason: `SB Long: sweep ${sweep.level.toFixed(2)} → FVG retest`,
+            side: 'LONG', entry, sl, tp,
+            reason: `SB Long: sweep ${setup.sweptLevel.toFixed(2)} → FVG retest`,
           };
         }
       } else {
-        // Bearish: price retraces up into FVG zone
-        if (bar.high >= fvg.bot && bar.close < fvg.top) {
-          const entry = fvg.bot; // Enter at bottom of FVG
-          const sl = fvg.midHigh + 0.5; // Above FVG candle's high
-
-          // TP: next swing low below entry
-          const tpLevel = findNextLevel(allLevels, entry, 'below');
-          if (!tpLevel) {
-            context.pendingSweep = null;
-            context.pendingFVG = null;
-            return null;
-          }
-
-          const tp = tpLevel.price;
-          const risk = sl - entry;
-          const reward = entry - tp;
-
-          if (risk <= 0 || reward / risk < minRR) {
-            context.pendingSweep = null;
-            context.pendingFVG = null;
-            return null;
-          }
+        // Bearish: price retraces up into FVG, closes bearish
+        if (bar.high >= fvg.bot && bar.high <= fvg.top + (fvg.top - fvg.bot) && bar.close < midFVG) {
+          const entry = Math.min(bar.close, fvg.top);
+          const sl    = fvg.slLevel;
+          const risk  = sl - entry;
+          if (risk <= 0) { context.activeSetup = null; return null; }
+          const tp = entry - risk * rrTarget;
 
           context.tradesToday.set(dateStr, tradesUsed + 1);
-          context.pendingSweep = null;
-          context.pendingFVG = null;
-
+          context.activeSetup = null;
           return {
-            side: 'SHORT',
-            entry,
-            sl,
-            tp,
-            reason: `SB Short: sweep ${sweep.level.toFixed(2)} → FVG retest`,
+            side: 'SHORT', entry, sl, tp,
+            reason: `SB Short: sweep ${setup.sweptLevel.toFixed(2)} → FVG retest`,
           };
         }
       }
@@ -219,17 +199,3 @@ export const ictSilverBullet = {
     return null;
   },
 };
-
-/**
- * Find the next liquidity level above or below a given price.
- */
-function findNextLevel(levels, price, direction) {
-  if (direction === 'above') {
-    return levels.find((l) => l.price > price + 1);
-  }
-  // below — search from highest to lowest
-  for (let i = levels.length - 1; i >= 0; i--) {
-    if (levels[i].price < price - 1) return levels[i];
-  }
-  return null;
-}

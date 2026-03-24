@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { createChart, CandlestickSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts';
 
 const containerStyle = {
   background: 'var(--card)',
@@ -81,7 +81,7 @@ export default function VisualReplay({ candles, trades }) {
 
     candleSeries.setData(candles);
 
-    // Add trade markers
+    // Add trade markers using v5 API (createSeriesMarkers replaces series.setMarkers)
     if (trades && trades.length > 0) {
       const markers = [];
 
@@ -89,16 +89,16 @@ export default function VisualReplay({ candles, trades }) {
         const isLong = trade.side === 'LONG';
         const isWin = trade.pnl >= 0;
 
-        // Entry marker
-        markers.push({
-          time: trade.entryTime,
-          position: isLong ? 'belowBar' : 'aboveBar',
-          color: isLong ? '#22c55e' : '#ef4444',
-          shape: isLong ? 'arrowUp' : 'arrowDown',
-          text: `${isLong ? 'L' : 'S'} ${trade.entry?.toFixed(1) ?? ''}`,
-        });
+        if (trade.entryTime) {
+          markers.push({
+            time: trade.entryTime,
+            position: isLong ? 'belowBar' : 'aboveBar',
+            color: isLong ? '#22c55e' : '#ef4444',
+            shape: isLong ? 'arrowUp' : 'arrowDown',
+            text: `${isLong ? 'L' : 'S'} ${trade.entry?.toFixed(1) ?? ''}`,
+          });
+        }
 
-        // Exit marker
         if (trade.exitTime) {
           markers.push({
             time: trade.exitTime,
@@ -110,9 +110,8 @@ export default function VisualReplay({ candles, trades }) {
         }
       }
 
-      // Sort markers by time (required by lightweight-charts)
       markers.sort((a, b) => a.time - b.time);
-      candleSeries.setMarkers(markers);
+      createSeriesMarkers(candleSeries, markers);
     }
 
     chart.timeScale().fitContent();
