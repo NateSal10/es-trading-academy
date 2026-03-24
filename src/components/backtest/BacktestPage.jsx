@@ -33,11 +33,9 @@ export default function BacktestPage() {
   const [pineTabTrigger, setPineTabTrigger] = useState(null)
   const [apiKeyMissing, setApiKeyMissing] = useState(false)
 
-  const { strategyVariants, addVariant, saveBacktestResult } = useStore((s) => ({
-    strategyVariants: s.strategyVariants,
-    addVariant: s.addVariant,
-    saveBacktestResult: s.saveBacktestResult,
-  }))
+  const strategyVariants = useStore((s) => s.strategyVariants)
+  const addVariant = useStore((s) => s.addVariant)
+  const saveBacktestResult = useStore((s) => s.saveBacktestResult)
 
   const nativeTf = selectedVariant
     ? (PRESET_STRATEGIES.find((s) => s.id === selectedVariant.baseStrategy)?.defaultTimeframe ?? '5m')
