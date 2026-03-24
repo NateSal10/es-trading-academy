@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries } from 'lightweight-charts';
 
 const containerStyle = {
   background: 'var(--card)',
@@ -44,7 +44,7 @@ export default function VisualReplay({ candles, trades }) {
     if (!candles || candles.length < 2 || !chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
+      autoSize: true,
       height: 400,
       layout: {
         background: { color: 'transparent' },
@@ -118,15 +118,7 @@ export default function VisualReplay({ candles, trades }) {
     chart.timeScale().fitContent();
     chartRef.current = chart;
 
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       chart.remove();
       chartRef.current = null;
     };
@@ -143,7 +135,7 @@ export default function VisualReplay({ candles, trades }) {
       <div style={labelStyle}>
         Visual Replay — {tradeCount} trades ({wins}W / {losses}L)
       </div>
-      <div ref={chartContainerRef} />
+      <div ref={chartContainerRef} style={{ height: '400px', width: '100%' }} />
       <div style={legendStyle}>
         <span><span style={dotStyle('#22c55e')} /> Long Entry</span>
         <span><span style={dotStyle('#ef4444')} /> Short Entry</span>

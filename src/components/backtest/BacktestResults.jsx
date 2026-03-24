@@ -61,7 +61,7 @@ function EquityCurve({ equityCurve }) {
     const lineColor = isUp ? '#22c55e' : '#ef4444';
 
     const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth,
+      autoSize: true,
       height: 160,
       layout: {
         background: { color: 'transparent' },
@@ -107,15 +107,7 @@ function EquityCurve({ equityCurve }) {
 
     chartRef.current = chart;
 
-    const handleResize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       chart.remove();
       chartRef.current = null;
     };
@@ -130,7 +122,7 @@ function EquityCurve({ equityCurve }) {
   return (
     <div style={{ ...card, marginTop: '12px', padding: '14px' }}>
       <div style={{ ...label, textAlign: 'left', marginBottom: '8px' }}>Equity Curve</div>
-      <div ref={containerRef} />
+      <div ref={containerRef} style={{ width: '100%', height: '160px' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
         <span style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: "'JetBrains Mono', monospace" }}>
           ${startEq.toLocaleString()}
