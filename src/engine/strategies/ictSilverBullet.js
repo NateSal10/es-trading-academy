@@ -14,6 +14,7 @@ import { detectSwingPoints } from '../smcDetectors.js';
  */
 export const ictSilverBullet = {
   id: 'ict_silver_bullet',
+  defaultTimeframe: '5m',
   name: 'ICT Silver Bullet',
   description:
     'Liquidity sweep → displacement impulse → FVG retest entry. Trades the 10-11 AM & 2-3 PM ET kill zones.',

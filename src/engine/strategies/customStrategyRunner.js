@@ -50,6 +50,7 @@ export function buildCustomStrategy(config) {
 
   return {
     id: 'custom',
+    defaultTimeframe: '5m',
     name: 'Custom Strategy',
     description: 'User-defined custom strategy',
     category: 'custom',

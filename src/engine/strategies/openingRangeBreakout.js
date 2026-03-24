@@ -2,6 +2,7 @@ import { toET } from './strategyInterface.js';
 
 export const openingRangeBreakout = {
   id: 'orb_8am',
+  defaultTimeframe: '1m',
   name: '8AM Opening Range Breakout',
   description:
     'Trades breakouts of the 8:00-8:15 AM ET opening range with measured move targets. Inspired by RP Profits.',

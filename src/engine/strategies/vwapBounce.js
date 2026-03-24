@@ -2,6 +2,7 @@ import { toET, computeVWAP } from './strategyInterface.js';
 
 export const vwapBounce = {
   id: 'vwap_bounce',
+  defaultTimeframe: '5m',
   name: 'VWAP Bounce',
   description: 'Mean reversion strategy that trades bounces off VWAP with confirmation candle.',
   category: 'mean_reversion',

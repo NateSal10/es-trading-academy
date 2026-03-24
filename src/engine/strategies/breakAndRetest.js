@@ -14,6 +14,7 @@ import { detectSwingPoints } from '../smcDetectors.js';
  */
 export const breakAndRetest = {
   id: 'break_retest',
+  defaultTimeframe: '5m',
   name: 'Break & Retest',
   description:
     'Break of key swing S/R + retest with confirmation candle. Classic structural entry with R:R filtered exits.',

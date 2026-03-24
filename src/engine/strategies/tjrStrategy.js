@@ -4,6 +4,7 @@ import { aggregateToTimeframe } from '../aggregateCandles.js';
 
 export const tjrStrategy = {
   id: 'tjr',
+  defaultTimeframe: '5m',
   name: 'TJR Multi-TF',
   description:
     'Tyler Riches style: HTF key levels + LTF BOS/CHOCH + FVG confirmation for precision entries.',
