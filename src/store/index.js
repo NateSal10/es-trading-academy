@@ -279,6 +279,35 @@ const useStore = create(
       })),
       clearBacktestHistory: () => set({ backtestHistory: [] }),
 
+      // ─── STRATEGY VARIANTS ─────────────────────────────────────────
+      strategyVariants: [],
+
+      addVariant: (variant) => set((s) => {
+        // If name collision: overwrite the existing variant
+        const existing = s.strategyVariants.find(v => v.name === variant.name);
+        if (existing) {
+          return {
+            strategyVariants: s.strategyVariants.map(v =>
+              v.name === variant.name
+                ? { ...variant, id: v.id }  // keep original id, update everything else
+                : v
+            )
+          };
+        }
+        // Prepend new variant; prune oldest if over 20
+        const updated = [variant, ...s.strategyVariants];
+        if (updated.length > 20) {
+          updated.pop();  // remove oldest (last element)
+        }
+        return { strategyVariants: updated };
+      }),
+
+      deleteVariant: (id) => set((s) => ({
+        strategyVariants: s.strategyVariants.filter(v => v.id !== id),
+      })),
+
+      clearVariants: () => set({ strategyVariants: [] }),
+
       // Paper trading account
       paperAccount: { startingBalance: 10000, balance: 10000, trades: [] },
       setPaperStartingBalance: (bal) => {
@@ -352,6 +381,7 @@ const useStore = create(
         brStrategy: s.brStrategy,
         paperAccount: s.paperAccount,
         backtestHistory: s.backtestHistory,
+        strategyVariants: s.strategyVariants,
       }),
     }
   )
