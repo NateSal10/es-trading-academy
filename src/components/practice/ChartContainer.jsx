@@ -567,6 +567,23 @@ export default function ChartContainer({
     return () => chart.unsubscribeClick(handler)
   }, [orderMode, onChartClick, drawingTool, magnetEnabled])
 
+  // ── TV-style line label helpers ────────────────────────────────────────────
+  // Returns "TP  +5.25 pts  +$263" or "SL  -10.50 pts  -$525"
+  function tpLabel(tpPrice, entryPrice) {
+    const pv   = pointValue ?? 50
+    const pts  = tpPrice - entryPrice
+    const sign = pts >= 0 ? '+' : ''
+    const $val = Math.round(Math.abs(pts) * pv)
+    return `TP   ${sign}${pts.toFixed(2)} pts   ${sign}$${$val.toLocaleString()}`
+  }
+  function slLabel(slPrice, entryPrice) {
+    const pv   = pointValue ?? 50
+    const pts  = slPrice - entryPrice
+    const sign = pts >= 0 ? '+' : ''
+    const $val = Math.round(Math.abs(pts) * pv)
+    return `SL   ${sign}${pts.toFixed(2)} pts   ${pts >= 0 ? '+' : '-'}$${$val.toLocaleString()}`
+  }
+
   // ── Order price lines (pending & active) ──────────────────────────────────
   useEffect(() => {
     const cs = seriesRef.current.candles
@@ -582,41 +599,44 @@ export default function ChartContainer({
 
     // Awaiting fill — show pending entry line only
     if (awaitingFill && !pendingOrder && !activeOrder) {
-      const aColor = 'rgba(79,142,247,0.5)'
-      const label = awaitingFill.orderType === 'limit'      ? `LIMIT ${awaitingFill.side} @ ${awaitingFill.entry.toFixed(2)}`
-                  : awaitingFill.orderType === 'stop'       ? `STOP ${awaitingFill.side} @ ${awaitingFill.entry.toFixed(2)}`
-                  : `STOP-LMT ${awaitingFill.side}`
+      const aColor = awaitingFill.side === 'LONG' ? '#26a69a' : '#ef5350'
+      const typeLabel = awaitingFill.orderType === 'limit' ? 'LIMIT'
+                      : awaitingFill.orderType === 'stop'  ? 'STOP'
+                      : 'STOP-LMT'
 
       orderLinesRef.current.entry = cs.createPriceLine({
         price: awaitingFill.entry,
         color: aColor,
-        lineWidth: 1,
+        lineWidth: 2,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: label,
+        title: `${typeLabel} ${awaitingFill.side}   ${awaitingFill.entry.toFixed(2)}`,
       })
       if (awaitingFill.orderType === 'stop_limit' && awaitingFill.stopTrigger != null) {
         orderLinesRef.current.trigger = cs.createPriceLine({
           price: awaitingFill.stopTrigger,
-          color: 'rgba(245,158,11,0.5)',
+          color: '#f59e0b',
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: `TRIGGER @ ${awaitingFill.stopTrigger.toFixed(2)}`,
+          title: `TRIGGER   ${awaitingFill.stopTrigger.toFixed(2)}`,
         })
       }
-      // Show TP/SL as fully visible draggable lines
-      orderLinesRef.current.tp = cs.createPriceLine({ price: awaitingFill.tp, color: '#22c55e', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `TP ${awaitingFill.tp.toFixed(2)}` })
-      orderLinesRef.current.sl = cs.createPriceLine({ price: awaitingFill.sl, color: '#ef4444', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `SL ${awaitingFill.sl.toFixed(2)}` })
+      orderLinesRef.current.tp = cs.createPriceLine({
+        price: awaitingFill.tp, color: '#26a69a', lineWidth: 2, lineStyle: LineStyle.Solid,
+        axisLabelVisible: true, title: tpLabel(awaitingFill.tp, awaitingFill.entry),
+      })
+      orderLinesRef.current.sl = cs.createPriceLine({
+        price: awaitingFill.sl, color: '#ef5350', lineWidth: 2, lineStyle: LineStyle.Solid,
+        axisLabelVisible: true, title: slLabel(awaitingFill.sl, awaitingFill.entry),
+      })
       return
     }
 
     const order = pendingOrder || activeOrder
     if (!order) return
 
-    const entryColor = '#4f8ef7'
-    const tpColor    = '#22c55e'
-    const slColor    = '#ef4444'
+    const entryColor = order.side === 'LONG' ? '#26a69a' : '#ef5350'
 
     orderLinesRef.current.entry = cs.createPriceLine({
       price: order.entry,
@@ -624,7 +644,7 @@ export default function ChartContainer({
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
       axisLabelVisible: true,
-      title: `${order.side} @ ${order.entry.toFixed(2)}`,
+      title: `${order.side}   ${order.entry.toFixed(2)}`,
     })
     // For stop-limit: also show the trigger line
     if (order.orderType === 'stop_limit' && order.stopTrigger != null) {
@@ -634,24 +654,24 @@ export default function ChartContainer({
         lineWidth: 1,
         lineStyle: LineStyle.Dotted,
         axisLabelVisible: true,
-        title: `TRIGGER @ ${order.stopTrigger.toFixed(2)}`,
+        title: `TRIGGER   ${order.stopTrigger.toFixed(2)}`,
       })
     }
     orderLinesRef.current.tp = cs.createPriceLine({
       price: order.tp,
-      color: tpColor,
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
+      color: '#26a69a',
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
       axisLabelVisible: true,
-      title: `TP ${order.tp.toFixed(2)}`,
+      title: tpLabel(order.tp, order.entry),
     })
     orderLinesRef.current.sl = cs.createPriceLine({
       price: order.sl,
-      color: slColor,
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
+      color: '#ef5350',
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
       axisLabelVisible: true,
-      title: `SL ${order.sl.toFixed(2)}`,
+      title: slLabel(order.sl, order.entry),
     })
   }, [pendingOrder, activeOrder, awaitingFill])
 
@@ -660,18 +680,18 @@ export default function ChartContainer({
     const ol = orderLinesRef.current
     const order = pendingOrder || activeOrder
     if (!order) return
-    if (ol.tp)      ol.tp.applyOptions({ price: order.tp, title: `TP ${order.tp.toFixed(2)}` })
-    if (ol.sl)      ol.sl.applyOptions({ price: order.sl, title: `SL ${order.sl.toFixed(2)}` })
-    if (ol.entry)   ol.entry.applyOptions({ price: order.entry, title: `${order.side} @ ${order.entry.toFixed(2)}` })
-    if (ol.trigger && order.stopTrigger != null) ol.trigger.applyOptions({ price: order.stopTrigger, title: `TRIGGER @ ${order.stopTrigger.toFixed(2)}` })
+    if (ol.tp)    ol.tp.applyOptions({ price: order.tp, title: tpLabel(order.tp, order.entry) })
+    if (ol.sl)    ol.sl.applyOptions({ price: order.sl, title: slLabel(order.sl, order.entry) })
+    if (ol.entry) ol.entry.applyOptions({ price: order.entry, title: `${order.side}   ${order.entry.toFixed(2)}` })
+    if (ol.trigger && order.stopTrigger != null) ol.trigger.applyOptions({ price: order.stopTrigger, title: `TRIGGER   ${order.stopTrigger.toFixed(2)}` })
   }, [pendingOrder?.tp, pendingOrder?.sl, pendingOrder?.entry, pendingOrder?.stopTrigger, activeOrder?.tp, activeOrder?.sl])
 
   // ── Update TP/SL lines while awaiting fill (so drag updates are reflected) ─
   useEffect(() => {
     const ol = orderLinesRef.current
     if (!awaitingFill || pendingOrder || activeOrder) return
-    if (ol.tp) ol.tp.applyOptions({ price: awaitingFill.tp, title: `TP ${awaitingFill.tp.toFixed(2)}` })
-    if (ol.sl) ol.sl.applyOptions({ price: awaitingFill.sl, title: `SL ${awaitingFill.sl.toFixed(2)}` })
+    if (ol.tp) ol.tp.applyOptions({ price: awaitingFill.tp, title: tpLabel(awaitingFill.tp, awaitingFill.entry) })
+    if (ol.sl) ol.sl.applyOptions({ price: awaitingFill.sl, title: slLabel(awaitingFill.sl, awaitingFill.entry) })
   }, [awaitingFill?.tp, awaitingFill?.sl])
 
   // Keep refs in sync so document listeners always see fresh values

@@ -206,17 +206,25 @@ export default function PracticePage() {
   }
 
   // ── Replay: check fill + TP/SL on each bar advance ───────────────────────
+  // Only fire when replayIndex changes (a new bar is revealed), NOT when the
+  // order state changes — that prevents false fills the instant an order is placed.
   useEffect(() => {
     if (!replayMode) return
     const candle = candles[replayIndex - 1]
+    if (!candle || !awaitingFill) return
+    // Guard: only check candles that started AFTER the order was placed
+    if (awaitingFill.placedAfterCandleTime && candle.time <= awaitingFill.placedAfterCandleTime) return
     checkFill(candle)
-  }, [replayIndex, awaitingFill, replayMode])
+  }, [replayIndex, replayMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!replayMode) return
     const candle = candles[replayIndex - 1]
+    if (!candle || !activeOrder) return
+    // Guard: only check candles that started AFTER the trade was filled
+    if (activeOrder.filledAtCandleTime && candle.time <= activeOrder.filledAtCandleTime) return
     checkTPSL(candle)
-  }, [replayIndex, activeOrder, replayMode])
+  }, [replayIndex, replayMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Live mode: check fill + TP/SL whenever candles update (polling) ──────
   // Skip the check when symbol/timeframe just changed — the new candles cover
@@ -308,7 +316,12 @@ export default function PracticePage() {
     setOrderValidError(null)
 
     const isMarket = pendingOrder.orderType === 'market'
-    const currentCandleTime = candles.length > 0 ? candles[candles.length - 1].time : 0
+    // In replay mode use the current replay candle; in live mode use the latest candle.
+    // Using the wrong candle time (e.g. the last candle in the full dataset) causes
+    // the fill guard to pass on the very candle where the order was placed.
+    const currentCandleTime = replayMode
+      ? (candles[replayIndex - 1]?.time ?? 0)
+      : (candles.length > 0 ? candles[candles.length - 1].time : 0)
 
     const trailData = trailingEnabled ? { trailPts, trailSL: sl } : {}
 
@@ -418,10 +431,16 @@ export default function PracticePage() {
         {TIMEFRAMES.map(tf => (
           <button key={tf} className={`tool-btn${timeframe === tf ? ' active' : ''}`} onClick={() => {
             if (tf === timeframe) return
-            // Remember current candle timestamp so we can restore position after TF change
-            if (replayMode && replayIndex > 0 && candles.length > 0) {
-              const curTime = candles[Math.min(replayIndex, candles.length) - 1]?.time
-              replayAnchorRef.current = curTime ?? null
+            if (replayMode) {
+              // Remember current candle timestamp so we can restore position after TF change
+              if (replayIndex > 0 && candles.length > 0) {
+                const curTime = candles[Math.min(replayIndex, candles.length) - 1]?.time
+                replayAnchorRef.current = curTime ?? null
+              }
+              // Clear any in-flight orders — they reference prices/times from the old TF
+              setAwaitingFill(null)
+              setActiveOrder(null)
+              setPendingOrder(null)
             }
             setTimeframe(tf)
           }}>{tf}</button>
