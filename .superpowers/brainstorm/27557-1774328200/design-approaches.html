@@ -1,0 +1,203 @@
+<h2>Redesign Approach — Pick One</h2>
+<p class="subtitle">Same features, different scoping. All three deliver everything you asked for.</p>
+
+<style>
+.mock-panel { background:#1a1d23; border:1px solid #2a2d35; border-radius:8px; overflow:hidden; font-size:11px; color:#9ca3af; }
+.mock-topbar { background:#12151a; border-bottom:1px solid #2a2d35; padding:6px 10px; display:flex; align-items:center; gap:8px; font-size:10px; }
+.mock-chip { background:#2a2d35; border-radius:4px; padding:2px 8px; font-size:10px; color:#e2e8f0; }
+.mock-chip.active { background:#4f8ef7; color:#fff; }
+.mock-chip.green { background:#22c55e22; color:#22c55e; border:1px solid #22c55e44; }
+.mock-chip.purple { background:#a855f722; color:#a855f7; border:1px solid #a855f744; }
+.mock-chart-area { background:#0d0f13; flex:1; display:flex; align-items:center; justify-content:center; color:#3a3d45; font-size:10px; min-height:90px; position:relative; }
+.mock-bottom { background:#12151a; border-top:1px solid #2a2d35; padding:8px 10px; font-size:10px; }
+.mock-tab { display:inline-block; padding:3px 10px; border-radius:4px; font-size:10px; margin-right:4px; }
+.mock-tab.active { background:#4f8ef7; color:#fff; }
+.mock-tab:not(.active) { color:#6b7280; }
+.mock-metric { display:inline-block; padding:2px 6px; background:#1e2128; border-radius:4px; margin:2px; font-size:10px; }
+.mock-metric span { color:#22c55e; }
+.mock-metric span.red { color:#ef4444; }
+.mock-btn { background:#4f8ef7; color:#fff; border:none; border-radius:5px; padding:4px 10px; font-size:10px; cursor:pointer; }
+.mock-btn.green { background:#22c55e; }
+.mock-btn.purple { background:#a855f7; }
+.pill { display:inline-block; padding:1px 6px; border-radius:10px; font-size:9px; margin:1px; }
+.pill.done { background:#22c55e22; color:#22c55e; }
+.pill.new { background:#4f8ef722; color:#4f8ef7; }
+.pill.ai { background:#a855f722; color:#a855f7; }
+.phase-label { font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#4b5563; margin:5px 0 3px; }
+.nl-box { background:#1e2128; border:1px solid #2a2d35; border-radius:5px; padding:5px 8px; color:#6b7280; font-size:9px; line-height:1.4; }
+.nl-box em { color:#e2e8f0; font-style:normal; }
+</style>
+
+<div class="cards">
+
+  <!-- Option A: Big bang - everything at once -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0">
+      <div class="mock-panel" style="border-radius:0;border:0">
+        <div class="mock-topbar" style="justify-content:space-between;flex-wrap:wrap;gap:4px">
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+            <span class="mock-chip active">ICT Silver Bullet</span>
+            <span class="mock-chip">ICT (my rules)</span>
+            <span class="mock-chip">ORB</span>
+            <span class="mock-chip">Custom</span>
+            <span class="mock-chip purple">+ Pine Script</span>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <span class="mock-chip">ES=F</span>
+            <span class="mock-chip green">Jan 2024–Now</span>
+            <span class="mock-chip">5m ▾</span>
+            <button class="mock-btn">▶ Run</button>
+          </div>
+        </div>
+        <!-- NL bar -->
+        <div style="background:#0d0f13;padding:5px 10px;border-bottom:1px solid #2a2d35;display:flex;gap:6px;align-items:center">
+          <span style="font-size:9px;color:#6b7280;white-space:nowrap">Adjust strategy:</span>
+          <div class="nl-box" style="flex:1"><em>"target 3:1, only the 10 AM window, stop below FVG low"</em></div>
+          <button class="mock-btn purple" style="white-space:nowrap;font-size:9px">Apply &amp; Save</button>
+        </div>
+        <div class="mock-chart-area">
+          Chart + trade markers
+          <div style="position:absolute;top:6px;left:8px;display:flex;gap:3px">
+            <span class="mock-metric">P&L <span>+$4,250</span></span>
+            <span class="mock-metric">Win <span>64%</span></span>
+          </div>
+          <div style="position:absolute;top:6px;right:8px;display:flex;gap:3px">
+            <span style="background:#2a2d35;border-radius:3px;padding:2px 6px;font-size:9px">1m</span>
+            <span style="background:#4f8ef7;border-radius:3px;padding:2px 6px;font-size:9px;color:#fff">5m</span>
+            <span style="background:#2a2d35;border-radius:3px;padding:2px 6px;font-size:9px">15m</span>
+            <span style="background:#2a2d35;border-radius:3px;padding:2px 6px;font-size:9px">1h</span>
+          </div>
+        </div>
+        <div class="mock-bottom">
+          <span class="mock-tab active">Overview</span>
+          <span class="mock-tab">Trades</span>
+          <span class="mock-tab">Visual Replay</span>
+          <span class="mock-tab">Pine Script</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Full Redesign (everything at once)</h3>
+      <p>New TradingView layout + NL editing with saved variants + Pine Script tab + timeframe switcher on chart + auto-default timeframes. One big release, more risk of bugs.</p>
+      <div>
+        <span class="pill new">New layout</span>
+        <span class="pill ai">NL variants</span>
+        <span class="pill ai">Pine Script AI</span>
+        <span class="pill new">TF switcher</span>
+        <span class="pill new">Auto TF defaults</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Layout + UX first, AI features second -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0">
+      <div class="mock-panel" style="border-radius:0;border:0">
+        <div class="mock-topbar" style="justify-content:space-between">
+          <div style="display:flex;gap:4px;align-items:center">
+            <span class="mock-chip active">ICT Silver Bullet</span>
+            <span class="mock-chip">ORB</span>
+            <span class="mock-chip">VWAP</span>
+            <span class="mock-chip">B&amp;R</span>
+            <span class="mock-chip">Custom</span>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <span class="mock-chip">ES=F</span>
+            <span class="mock-chip green">1 yr</span>
+            <button class="mock-btn">▶ Run</button>
+          </div>
+        </div>
+        <div class="mock-chart-area" style="height:100px">
+          Chart + markers
+          <div style="position:absolute;top:6px;right:8px;display:flex;gap:2px">
+            <span style="background:#2a2d35;border-radius:3px;padding:2px 5px;font-size:9px">1m</span>
+            <span style="background:#4f8ef7;border-radius:3px;padding:2px 5px;font-size:9px;color:#fff">5m</span>
+            <span style="background:#2a2d35;border-radius:3px;padding:2px 5px;font-size:9px">15m</span>
+            <span style="background:#2a2d35;border-radius:3px;padding:2px 5px;font-size:9px">1h</span>
+          </div>
+        </div>
+        <div class="mock-bottom">
+          <span class="mock-tab active">Overview</span>
+          <span class="mock-tab">Trades</span>
+          <span class="mock-tab">Replay</span>
+          <div style="margin-top:5px">
+            <span class="phase-label">Phase 1 ships ↑ · Phase 2 adds:</span>
+            <span class="pill ai">NL variants</span>
+            <span class="pill ai">Pine Script AI</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Layout first, AI features in Phase 2</h3>
+      <p>Ship the new TradingView layout + timeframe switcher + auto-defaults first (lower risk). Then add NL variant saving and Pine Script translation in a second pass once layout is stable.</p>
+      <div>
+        <span class="pill new">Phase 1: Layout</span>
+        <span class="pill new">Phase 1: TF switcher</span>
+        <span class="pill ai">Phase 2: NL variants</span>
+        <span class="pill ai">Phase 2: Pine Script</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C: Recommended - full but incremental -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0">
+      <div class="mock-panel" style="border-radius:0;border:0">
+        <div class="mock-topbar" style="justify-content:space-between;flex-wrap:wrap;gap:4px">
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+            <span class="mock-chip active">ICT Silver Bullet</span>
+            <span class="mock-chip">ICT (my rules) ★</span>
+            <span class="mock-chip">ORB</span>
+            <span class="mock-chip purple">Pine Script ↑</span>
+            <span class="mock-chip">+ New</span>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <span class="mock-chip">ES=F</span>
+            <button class="mock-btn">▶ Run</button>
+          </div>
+        </div>
+        <!-- Compact NL row below -->
+        <div style="background:#0d0f13;padding:4px 10px;border-bottom:1px solid #2a2d35;display:flex;gap:6px;align-items:center">
+          <div class="nl-box" style="flex:1;min-height:0"><em>"target 3:1, 10 AM only"</em> <span style="color:#22c55e;font-size:9px">← saved as variant</span></div>
+          <button class="mock-btn" style="font-size:9px">Save Variant</button>
+          <span style="color:#6b7280;font-size:9px">or</span>
+          <button class="mock-btn purple" style="font-size:9px">Paste Pine</button>
+        </div>
+        <div class="mock-chart-area" style="height:85px">
+          Chart
+          <div style="position:absolute;top:5px;right:6px;display:flex;gap:2px">
+            <span style="background:#4f8ef7;border-radius:3px;padding:1px 5px;font-size:9px;color:#fff">5m</span>
+            <span style="background:#2a2d35;border-radius:3px;padding:1px 5px;font-size:9px">15m</span>
+            <span style="background:#2a2d35;border-radius:3px;padding:1px 5px;font-size:9px">1h</span>
+          </div>
+        </div>
+        <div class="mock-bottom" style="padding:5px 8px">
+          <span class="mock-tab active">Overview</span>
+          <span class="mock-tab">Trades</span>
+          <span class="mock-tab">Replay</span>
+          <span class="mock-tab">Pine Script</span>
+          <div style="margin-top:4px;display:flex;gap:3px;flex-wrap:wrap">
+            <span class="mock-metric">P&L <span>+$4,250</span></span>
+            <span class="mock-metric">Win <span>64%</span></span>
+            <span class="mock-metric">DD <span class="red">-$820</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Full redesign, built incrementally ⭐ Recommended</h3>
+      <p>Everything ships together but built in safe layers: layout shell first, then wire up features one by one. Faster to finish than B, lower risk than A. NL editing lives in a persistent bar above the chart so it's always one click away.</p>
+      <div>
+        <span class="pill new">New layout</span>
+        <span class="pill new">TF switcher</span>
+        <span class="pill ai">NL variants</span>
+        <span class="pill ai">Pine Script AI</span>
+        <span class="pill new">Auto TF defaults</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Click to select, then let me know in the terminal.</p>

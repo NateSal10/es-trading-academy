@@ -1,0 +1,241 @@
+<h2>Backtest Page — Layout Direction</h2>
+<p class="subtitle">Which overall layout feels most natural for how you'd actually use this?</p>
+
+<style>
+.mock-panel {
+  background: #1a1d23;
+  border: 1px solid #2a2d35;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 11px;
+  color: #9ca3af;
+}
+.mock-topbar {
+  background: #12151a;
+  border-bottom: 1px solid #2a2d35;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+.mock-chip {
+  background: #2a2d35;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: #e2e8f0;
+}
+.mock-chip.active {
+  background: #4f8ef7;
+  color: #fff;
+}
+.mock-sidebar-dark {
+  background: #12151a;
+  border-right: 1px solid #2a2d35;
+  padding: 8px;
+  width: 140px;
+  min-width: 140px;
+  font-size: 10px;
+}
+.mock-row { display: flex; }
+.mock-chart-area {
+  background: #0d0f13;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3a3d45;
+  font-size: 11px;
+  min-height: 120px;
+}
+.mock-bottom-panel {
+  background: #12151a;
+  border-top: 1px solid #2a2d35;
+  padding: 8px 10px;
+  font-size: 10px;
+}
+.mock-tab {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  margin-right: 4px;
+  cursor: pointer;
+}
+.mock-tab.active { background: #4f8ef7; color: #fff; }
+.mock-tab:not(.active) { color: #6b7280; }
+.mock-metric {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #1e2128;
+  border-radius: 4px;
+  margin: 2px;
+  font-size: 10px;
+}
+.mock-metric span { color: #22c55e; }
+.mock-metric span.red { color: #ef4444; }
+.mock-btn {
+  background: #4f8ef7;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.mock-input-sm {
+  background: #1e2128;
+  border: 1px solid #2a2d35;
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: #e2e8f0;
+  font-size: 10px;
+  width: 60px;
+}
+.tag { display: inline-block; background: #22c55e22; color: #22c55e; border-radius: 3px; padding: 1px 5px; font-size: 9px; margin-left: 4px; }
+.tag.amber { background: #f59e0b22; color: #f59e0b; }
+.tag.purple { background: #a855f722; color: #a855f7; }
+.section-label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #4b5563; margin: 6px 0 3px; }
+</style>
+
+<div class="cards">
+
+  <!-- Option A: TradingView-style (chart dominant, panel below) -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0">
+      <div class="mock-panel" style="border-radius:0;border:0">
+        <!-- Top bar -->
+        <div class="mock-topbar" style="justify-content:space-between">
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="mock-chip active">ES=F</span>
+            <span class="mock-chip">NQ=F</span>
+            <span style="color:#4b5563">|</span>
+            <span class="mock-chip active">ICT Silver Bullet</span>
+            <span class="mock-chip">ORB</span>
+            <span class="mock-chip">B&R</span>
+            <span class="mock-chip">Custom</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="mock-chip">Jan 2024 – Mar 2025</span>
+            <button class="mock-btn">▶ Run</button>
+          </div>
+        </div>
+        <!-- Chart (dominant) -->
+        <div class="mock-chart-area" style="height:130px;position:relative">
+          <span>Candlestick chart fills most of the screen</span>
+          <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
+            <span class="mock-metric">P&L <span>+$4,250</span></span>
+            <span class="mock-metric">Win Rate <span>64%</span></span>
+            <span class="mock-metric">Trades <span>31</span></span>
+          </div>
+        </div>
+        <!-- Bottom panel (TradingView style) -->
+        <div class="mock-bottom-panel">
+          <span class="mock-tab active">Overview</span>
+          <span class="mock-tab">Trades</span>
+          <span class="mock-tab">Properties</span>
+          <span class="mock-tab">Visual Replay</span>
+          <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
+            <span class="mock-metric">Profit Factor <span>2.1</span></span>
+            <span class="mock-metric">Max DD <span class="red">-$820</span></span>
+            <span class="mock-metric">Sharpe <span>1.4</span></span>
+            <span class="mock-metric">Expectancy <span>$137</span></span>
+            <span class="mock-metric">Avg R:R <span>2.3</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — TradingView Style</h3>
+      <p>Chart dominates the screen. Strategy picker + date range in a slim top bar. Metrics panel slides up from the bottom (tabs for Overview / Trades / Replay). Closest to what traders already know.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Side-by-side (config left, results right) -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0">
+      <div class="mock-panel" style="border-radius:0;border:0">
+        <div class="mock-row" style="height:220px">
+          <!-- Left: config -->
+          <div class="mock-sidebar-dark" style="width:150px;overflow:hidden">
+            <div class="section-label">Strategy</div>
+            <div style="background:#4f8ef722;border-radius:4px;padding:4px 6px;color:#4f8ef7;font-size:10px;margin-bottom:4px">ICT Silver Bullet</div>
+            <div style="color:#6b7280;font-size:10px;padding:3px 6px;border-radius:4px">ORB 8:15 AM</div>
+            <div style="color:#6b7280;font-size:10px;padding:3px 6px;border-radius:4px">VWAP Bounce</div>
+            <div style="color:#6b7280;font-size:10px;padding:3px 6px;border-radius:4px">Break &amp; Retest</div>
+            <div style="color:#6b7280;font-size:10px;padding:3px 6px;border-radius:4px">Custom…</div>
+            <div class="section-label" style="margin-top:8px">Describe changes</div>
+            <div style="background:#1e2128;border-radius:4px;padding:5px;color:#6b7280;font-size:9px;border:1px solid #2a2d35">
+              "use a 2:1 target, stop below the FVG low…"
+            </div>
+            <div class="section-label" style="margin-top:6px">Symbol / Range</div>
+            <div style="display:flex;gap:4px;margin-top:2px">
+              <span class="mock-chip active" style="font-size:9px">ES</span>
+              <span class="mock-chip" style="font-size:9px">NQ</span>
+            </div>
+            <button class="mock-btn" style="width:100%;margin-top:8px">▶ Run Backtest</button>
+          </div>
+          <!-- Right: results -->
+          <div style="flex:1;display:flex;flex-direction:column">
+            <div class="mock-chart-area" style="flex:1">Chart + trade markers</div>
+            <div class="mock-bottom-panel" style="padding:5px 8px">
+              <div style="display:flex;gap:3px;flex-wrap:wrap">
+                <span class="mock-metric">P&L <span>+$4,250</span></span>
+                <span class="mock-metric">Win Rate <span>64%</span></span>
+                <span class="mock-metric">Max DD <span class="red">-$820</span></span>
+                <span class="mock-metric">Sharpe <span>1.4</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Sidebar Config + Results</h3>
+      <p>Narrow left panel for strategy selection and natural language edits. Results fill the right side at all times. Good for iterating quickly — change one thing, re-run, compare instantly.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Step-by-step wizard + full results -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0">
+      <div class="mock-panel" style="border-radius:0;border:0">
+        <!-- Step indicator -->
+        <div class="mock-topbar">
+          <div style="display:flex;gap:0;align-items:center;flex:1">
+            <span style="background:#4f8ef7;color:#fff;border-radius:4px;padding:2px 8px;font-size:10px">1 · Strategy</span>
+            <span style="color:#4b5563;margin:0 4px">›</span>
+            <span style="color:#4b5563;font-size:10px">2 · Describe Edits</span>
+            <span style="color:#4b5563;margin:0 4px">›</span>
+            <span style="color:#4b5563;font-size:10px">3 · Date &amp; Symbol</span>
+            <span style="color:#4b5563;margin:0 4px">›</span>
+            <span style="color:#4b5563;font-size:10px">4 · Results</span>
+          </div>
+          <button class="mock-btn">▶ Run</button>
+        </div>
+        <!-- Step 1 content -->
+        <div style="padding:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <div style="background:#4f8ef722;border:1px solid #4f8ef7;border-radius:6px;padding:5px 9px;color:#4f8ef7;font-size:10px">ICT Silver Bullet ✓</div>
+          <div style="background:#1e2128;border:1px solid #2a2d35;border-radius:6px;padding:5px 9px;font-size:10px">ORB 8:15 AM</div>
+          <div style="background:#1e2128;border:1px solid #2a2d35;border-radius:6px;padding:5px 9px;font-size:10px">VWAP Bounce</div>
+          <div style="background:#1e2128;border:1px solid #2a2d35;border-radius:6px;padding:5px 9px;font-size:10px">Break &amp; Retest</div>
+          <div style="background:#1e2128;border:1px solid #2a2d35;border-radius:6px;padding:5px 9px;font-size:10px">TJR Multi-TF</div>
+          <div style="background:#a855f722;border:1px solid #a855f7;border-radius:6px;padding:5px 9px;color:#a855f7;font-size:10px">+ Custom (AI)</div>
+        </div>
+        <div style="padding:0 8px 8px;font-size:10px;color:#6b7280">
+          Customize: <span style="background:#1e2128;border-radius:3px;padding:2px 6px;color:#e2e8f0">"target 3:1 and only trade the 10 AM window"</span>
+          <span style="background:#4f8ef7;color:#fff;border-radius:3px;padding:2px 8px;margin-left:6px;font-size:9px">Apply</span>
+        </div>
+        <div class="mock-chart-area" style="height:80px">Results will show here after running</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Guided Wizard</h3>
+      <p>Step-by-step: pick strategy → describe changes in plain English → set date range → see results. Most beginner-friendly but adds extra clicks for experienced users.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Click a card to select it, then tell me in the terminal what you like or want to change.</p>

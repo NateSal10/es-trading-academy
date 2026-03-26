@@ -1,0 +1,140 @@
+<h2>Final Design — Full Backtest Redesign</h2>
+<p class="subtitle">Here's the complete layout. Review each zone and tell me if anything needs changing.</p>
+
+<style>
+* { box-sizing: border-box; }
+.mock-page { background:#0d0f13; border:1px solid #2a2d35; border-radius:10px; overflow:hidden; font-family:'JetBrains Mono',monospace; color:#9ca3af; font-size:10px; }
+.zone-label { position:absolute; background:#f59e0b; color:#000; font-size:8px; font-weight:700; padding:1px 5px; border-radius:3px; text-transform:uppercase; letter-spacing:0.5px; z-index:10; }
+.chip { background:#2a2d35; border-radius:4px; padding:2px 8px; font-size:10px; color:#e2e8f0; display:inline-block; }
+.chip.active { background:#4f8ef7; color:#fff; }
+.chip.variant { background:#22c55e22; color:#22c55e; border:1px solid #22c55e44; }
+.chip.pine { background:#a855f722; color:#a855f7; border:1px solid #a855f744; }
+.chip.tf { background:#2a2d35; color:#6b7280; padding:2px 7px; }
+.chip.tf.active { background:#4f8ef7; color:#fff; }
+.run-btn { background:#4f8ef7; color:#fff; border:none; border-radius:6px; padding:5px 16px; font-size:11px; font-weight:700; cursor:pointer; }
+.metric-card { background:#1a1d23; border:1px solid #2a2d35; border-radius:6px; padding:5px 8px; display:inline-block; min-width:70px; }
+.metric-card .val { color:#22c55e; font-size:12px; font-weight:700; }
+.metric-card .val.red { color:#ef4444; }
+.metric-card .lbl { color:#4b5563; font-size:8px; text-transform:uppercase; letter-spacing:0.5px; }
+.tab { display:inline-block; padding:3px 12px; border-radius:4px; font-size:10px; cursor:pointer; }
+.tab.active { background:#4f8ef7; color:#fff; }
+.tab:not(.active) { color:#6b7280; }
+.trade-row { display:flex; gap:8px; padding:3px 0; border-bottom:1px solid #1a1d23; align-items:center; }
+.win { color:#22c55e; }
+.loss { color:#ef4444; }
+.nl-input { background:#1e2128; border:1px solid #2a2d35; border-radius:5px; padding:4px 8px; color:#6b7280; font-size:10px; flex:1; }
+.nl-input em { color:#e2e8f0; font-style:normal; }
+</style>
+
+<div class="mock-page" style="position:relative">
+
+  <!-- ZONE 1: Top bar -->
+  <div style="position:relative">
+    <span class="zone-label" style="top:4px;left:4px">① Strategy Bar</span>
+    <div style="background:#12151a; border-bottom:1px solid #2a2d35; padding:8px 10px 8px 80px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+      <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+        <span class="chip active">ICT Silver Bullet</span>
+        <span class="chip variant">ICT (my 3:1 rules) ★</span>
+        <span class="chip">ORB 8:15</span>
+        <span class="chip">VWAP Bounce</span>
+        <span class="chip">B&amp;R</span>
+        <span class="chip">TJR</span>
+        <span class="chip pine">+ Pine Script</span>
+        <span class="chip" style="border:1px dashed #2a2d35;color:#4b5563">+ New Strategy</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="chip">ES=F ▾</span>
+        <span class="chip">Jan 2024 – Now ▾</span>
+        <button class="run-btn">▶ Run Backtest</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ZONE 2: NL editing bar -->
+  <div style="position:relative">
+    <span class="zone-label" style="top:5px;left:4px">② Natural Language Bar</span>
+    <div style="background:#0d0f13; border-bottom:1px solid #1e2128; padding:5px 10px 5px 80px; display:flex; gap:8px; align-items:center;">
+      <span style="color:#4b5563;font-size:9px;white-space:nowrap">Adjust strategy:</span>
+      <div class="nl-input"><em>"target 3:1 R:R, only trade the 10–11 AM window, stop below FVG low"</em></div>
+      <button style="background:#22c55e;color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:9px;white-space:nowrap;cursor:pointer">Apply &amp; Run</button>
+      <button style="background:#2a2d35;color:#e2e8f0;border:none;border-radius:5px;padding:4px 10px;font-size:9px;white-space:nowrap;cursor:pointer">Save as Variant</button>
+    </div>
+  </div>
+
+  <!-- ZONE 3: Chart area -->
+  <div style="position:relative">
+    <span class="zone-label" style="top:6px;left:4px">③ Chart (visual TF)</span>
+    <!-- TF switcher top-right of chart -->
+    <div style="position:absolute;top:6px;right:8px;display:flex;gap:3px;z-index:5">
+      <span class="chip tf">1m</span>
+      <span class="chip tf active">5m</span>
+      <span class="chip tf">15m</span>
+      <span class="chip tf">30m</span>
+      <span class="chip tf">1h</span>
+      <span class="chip tf">4h</span>
+    </div>
+    <!-- Live metrics overlay -->
+    <div style="position:absolute;top:6px;left:80px;display:flex;gap:4px;z-index:5">
+      <div class="metric-card"><div class="val">+$4,250</div><div class="lbl">Net P&L</div></div>
+      <div class="metric-card"><div class="val">64%</div><div class="lbl">Win Rate</div></div>
+      <div class="metric-card"><div class="val red">-$820</div><div class="lbl">Max DD</div></div>
+      <div class="metric-card"><div class="val">31</div><div class="lbl">Trades</div></div>
+    </div>
+    <div style="background:#0a0c10;height:200px;display:flex;align-items:center;justify-content:center;color:#2a2d35;font-size:11px;">
+      ↑ Candlestick chart with entry (▲▼) and exit (●) markers. TF switcher top-right changes view only — engine always ran on 5m.
+    </div>
+  </div>
+
+  <!-- ZONE 4: Bottom panel -->
+  <div style="position:relative">
+    <span class="zone-label" style="top:6px;left:4px">④ Results Panel (tabs)</span>
+    <div style="background:#12151a; border-top:1px solid #2a2d35; padding:8px 10px 8px 80px;">
+      <div style="margin-bottom:8px">
+        <span class="tab active">Overview</span>
+        <span class="tab">Trades</span>
+        <span class="tab">Visual Replay</span>
+        <span class="tab">Pine Script</span>
+      </div>
+
+      <!-- Overview tab content -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div class="metric-card"><div class="val">+$4,250</div><div class="lbl">Net P&L</div></div>
+        <div class="metric-card"><div class="val">64%</div><div class="lbl">Win Rate</div></div>
+        <div class="metric-card"><div class="val">2.1×</div><div class="lbl">Profit Factor</div></div>
+        <div class="metric-card"><div class="val red">-$820</div><div class="lbl">Max Drawdown</div></div>
+        <div class="metric-card"><div class="val">1.4</div><div class="lbl">Sharpe</div></div>
+        <div class="metric-card"><div class="val">31</div><div class="lbl">Trades</div></div>
+        <div class="metric-card"><div class="val">$137</div><div class="lbl">Expectancy</div></div>
+        <div class="metric-card"><div class="val">2.3</div><div class="lbl">Avg R:R</div></div>
+      </div>
+
+      <!-- Equity curve placeholder -->
+      <div style="background:#0d0f13;border:1px solid #1e2128;border-radius:5px;height:45px;margin-top:8px;display:flex;align-items:center;justify-content:center;color:#2a2d35;font-size:10px">
+        Equity curve (lightweight-charts line series)
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Legend -->
+<div style="margin-top:16px;display:flex;gap:16px;flex-wrap:wrap">
+  <div>
+    <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:6px">① Strategy Bar</div>
+    <p style="font-size:10px;color:#6b7280;margin:0">All strategies + variants in one scrollable row. "Pine Script" opens a paste modal. "+ New Strategy" opens the custom builder.</p>
+  </div>
+  <div>
+    <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:6px">② Natural Language Bar</div>
+    <p style="font-size:10px;color:#6b7280;margin:0">Always visible. Type a change → Apply &amp; Run (one shot) or Save as Variant (adds to strategy bar with a ★ star). No number inputs anywhere.</p>
+  </div>
+  <div>
+    <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:6px">③ Chart + TF Switcher</div>
+    <p style="font-size:10px;color:#6b7280;margin:0">Engine runs on the strategy's native TF (5m for ICT, 1m for ORB). The 1m/5m/15m/1h buttons just change the visual — trade markers stay correct on any TF.</p>
+  </div>
+  <div>
+    <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:6px">④ Results Panel</div>
+    <p style="font-size:10px;color:#6b7280;margin:0">Overview (metrics + equity curve), Trades (log + CSV), Visual Replay (interactive chart), Pine Script (paste + translate tab).</p>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px">Does this layout look right? Any zones you want to move, remove, or redesign? Tell me in the terminal.</p>
