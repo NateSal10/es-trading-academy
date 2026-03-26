@@ -327,6 +327,40 @@ class VerticalBandPrimitive {
   updateAllViews() {}
 }
 
+// ── ICT Kill Zone definitions (UTC hours) ────────────────────────────────────
+const KILL_ZONE_DEFS = [
+  { label: 'London Open',  startH: 7,  startM: 0,  endH: 10, endM: 0,  color: 'rgba(56,140,240,0.09)',  labelColor: 'rgba(56,140,240,0.22)' },
+  { label: 'NY Open',      startH: 14, startM: 30, endH: 16, endM: 0,  color: 'rgba(34,197,94,0.09)',   labelColor: 'rgba(34,197,94,0.22)' },
+  { label: 'NY Lunch',     startH: 17, startM: 0,  endH: 18, endM: 0,  color: 'rgba(245,158,11,0.09)',  labelColor: 'rgba(245,158,11,0.22)' },
+  { label: 'NY Close',     startH: 20, startM: 0,  endH: 21, endM: 0,  color: 'rgba(239,68,68,0.09)',   labelColor: 'rgba(239,68,68,0.22)' },
+]
+
+function buildKillZones(candles) {
+  if (!candles.length) return []
+  const days = [...new Set(candles.map(c => {
+    const d = new Date(c.time * 1000)
+    return `${d.getUTCFullYear()},${d.getUTCMonth()},${d.getUTCDate()}`
+  }))]
+  const zones = []
+  days.forEach(dayStr => {
+    const [y, m, d] = dayStr.split(',').map(Number)
+    KILL_ZONE_DEFS.forEach(def => {
+      const windowStart = Math.floor(Date.UTC(y, m, d, def.startH, def.startM) / 1000)
+      const windowEnd   = Math.floor(Date.UTC(y, m, d, def.endH,   def.endM)   / 1000)
+      const sc = candles.filter(c => c.time >= windowStart && c.time <= windowEnd)
+      if (!sc.length) return
+      zones.push({
+        startTime:  sc[0].time,
+        endTime:    sc[sc.length - 1].time,
+        color:      def.color,
+        labelColor: def.labelColor,
+        label:      def.label,
+      })
+    })
+  })
+  return zones
+}
+
 // ── Chart theme ───────────────────────────────────────────────────────────────
 const CHART_OPTIONS = {
   layout: {
@@ -382,6 +416,7 @@ export default function ChartContainer({
   const fvgPrimRef        = useRef(null)
   const obPrimRef         = useRef(null)
   const sessionPrimRef    = useRef(null)
+  const killZonePrimRef   = useRef(null)
   const drawingPrimRef    = useRef(null)
   const brStrategyPrimRef = useRef(null)
   const drawStartRef      = useRef(null)   // { time, price } — first click of line/box
@@ -460,11 +495,13 @@ export default function ChartContainer({
     fvgPrimRef.current      = new BoxZonePrimitive()
     obPrimRef.current       = new BoxZonePrimitive()
     sessionPrimRef.current  = new VerticalBandPrimitive()
+    killZonePrimRef.current = new VerticalBandPrimitive()
     brStrategyPrimRef.current = new BoxZonePrimitive()
     drawingPrimRef.current  = new DrawingLayerPrimitive()
     seriesRef.current.candles.attachPrimitive(fvgPrimRef.current)
     seriesRef.current.candles.attachPrimitive(obPrimRef.current)
     seriesRef.current.candles.attachPrimitive(sessionPrimRef.current)
+    seriesRef.current.candles.attachPrimitive(killZonePrimRef.current)
     seriesRef.current.candles.attachPrimitive(brStrategyPrimRef.current)
     seriesRef.current.candles.attachPrimitive(drawingPrimRef.current)
 
@@ -1012,6 +1049,7 @@ export default function ChartContainer({
 
     // Background bands via primitive
     sessionPrimRef.current?.updateZones(buildSessionZones(visibleCandles, sessions))
+    killZonePrimRef.current?.updateZones(sessions.killZones ? buildKillZones(visibleCandles) : [])
 
     // H/L price lines — remove previous first
     if (seriesRef.current._sessionHLLines) {

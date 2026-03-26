@@ -133,13 +133,26 @@ export function calculateMetrics(trades, equityCurve, config) {
     mean(trades.map((t) => t.exitBar - t.entryBar))
   );
 
-  // Sharpe ratio: annualized using sqrt(252)
+  // Sharpe ratio: annualized using sqrt(252) — computed on DAILY equity returns
+  // to avoid inflating when multiple trades close on the same calendar day.
   let sharpeRatio = 0;
-  if (totalTrades >= 2) {
-    const returns = trades.map((t) => t.pnl / config.startingBalance);
-    const meanReturn = mean(returns);
-    const stdReturn = stdev(returns);
-    sharpeRatio = stdReturn === 0 ? 0 : round2((meanReturn / stdReturn) * Math.sqrt(252));
+  if (equityCurve.length >= 2) {
+    // Bucket equity by calendar date (UTC), take the last equity reading per day
+    const dayMap = new Map();
+    for (const pt of equityCurve) {
+      const d = new Date(pt.time * 1000).toISOString().slice(0, 10);
+      dayMap.set(d, pt.equity);
+    }
+    const dailyEquities = [...dayMap.values()];
+    if (dailyEquities.length >= 2) {
+      const dailyReturns = [];
+      for (let i = 1; i < dailyEquities.length; i++) {
+        dailyReturns.push((dailyEquities[i] - dailyEquities[i - 1]) / dailyEquities[i - 1]);
+      }
+      const meanReturn = mean(dailyReturns);
+      const stdReturn  = stdev(dailyReturns);
+      sharpeRatio = stdReturn === 0 ? 0 : round2((meanReturn / stdReturn) * Math.sqrt(252));
+    }
   }
 
   return {

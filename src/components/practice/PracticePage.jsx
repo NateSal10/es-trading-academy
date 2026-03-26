@@ -56,18 +56,25 @@ export default function PracticePage() {
   const [balanceInput,    setBalanceInput]    = useState('')
 
   // Order flow
-  const [orderType,    setOrderType]    = useState('market')
-  const [orderMode,    setOrderMode]    = useState(null)   // 'LONG' | 'SHORT' | null
-  const [pendingOrder, setPendingOrder] = useState(null)   // ticket being configured
-  const [awaitingFill, setAwaitingFill] = useState(null)   // confirmed, waiting to fill
-  const [activeOrder,  setActiveOrder]  = useState(null)   // filled, tracking TP/SL
-  const [orderResult,  setOrderResult]  = useState(null)   // { win, pnl, r }
-  const [tickPrice,    setTickPrice]    = useState(null)   // live simulated price from chart ticks
+  const [orderType,         setOrderType]         = useState('market')
+  const [orderMode,         setOrderMode]         = useState(null)   // 'LONG' | 'SHORT' | null
+  const [pendingOrder,      setPendingOrder]      = useState(null)   // ticket being configured
+  const [awaitingFill,      setAwaitingFill]      = useState(null)   // confirmed, waiting to fill
+  const [activeOrder,       setActiveOrder]       = useState(null)   // filled, tracking TP/SL
+  const [orderResult,       setOrderResult]       = useState(null)   // { win, pnl, r }
+  const [tickPrice,         setTickPrice]         = useState(null)   // live simulated price from chart ticks
+  const [orderValidError,   setOrderValidError]   = useState(null)   // validation warning string
+  const [trailingEnabled,   setTrailingEnabled]   = useState(false)
+  const [trailPts,          setTrailPts]          = useState(10)
+  const [dailyLimitAck,     setDailyLimitAck]     = useState(false)  // user acknowledged daily limit banner
+  const [pendingGrade,      setPendingGrade]       = useState(null)   // grade for the result trade (A+/A/B/C)
 
   const { candles, loading, isLive, contract } = useChartData(symbol, timeframe)
 
   const addPaperTrade           = useStore(s => s.addPaperTrade)
+  const updatePaperTrade        = useStore(s => s.updatePaperTrade)
   const paperAccount            = useStore(s => s.paperAccount)
+  const lastTradeIdRef          = useRef(null)
   const account                 = useStore(s => s.account)
   const resetPaperAccount       = useStore(s => s.resetPaperAccount)
   const resetAccount            = useStore(s => s.resetAccount)
@@ -77,6 +84,7 @@ export default function PracticePage() {
   const clearDrawings           = useStore(s => s.clearDrawings)
 
   const DEFAULT_STOP_PTS = 10
+  const DAILY_LOSS_LIMIT = 1000  // Alpha Futures Zero rule
 
   const lastCandle = candles.length > 0
     ? candles[replayMode ? Math.max(0, replayIndex - 1) : candles.length - 1]
@@ -86,6 +94,18 @@ export default function PracticePage() {
 
   // Live price: prefer tick simulation price (updates every ~100ms) over polled candle close
   const livePrice = tickPrice ?? lastPrice
+
+  // ── Daily P&L + loss limit ────────────────────────────────────────────────
+  const todayStr = new Date().toISOString().split('T')[0]
+  const dailyClosedPnL = (accountMode === 'prop' ? account.dailyPnL[todayStr] : null) ??
+    paperAccount.trades
+      .filter(t => t.accountType === accountMode && (t.date || '').startsWith(todayStr))
+      .reduce((s, t) => s + (t.pnl || 0), 0)
+  const unrealizedPnL = activeOrder && livePrice != null
+    ? (activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pointValue(symbol)
+    : 0
+  const dailyTotalPnL     = dailyClosedPnL + unrealizedPnL
+  const dailyLimitReached = dailyTotalPnL <= -DAILY_LOSS_LIMIT
 
   const handleTickPrice = useCallback((price) => {
     setTickPrice(price)
@@ -136,8 +156,28 @@ export default function PracticePage() {
 
   function checkTPSL(candle) {
     if (!candle || !activeOrder) return
-    const { side, entry, tp, sl } = activeOrder
+    const { side, entry, tp, trailPts: tPts, trailSL } = activeOrder
     const pv = pointValue(symbol)
+
+    // ── Trailing stop: advance SL as price moves in favor ─────────────────
+    let currentSL = activeOrder.sl
+    if (tPts && trailSL != null) {
+      if (side === 'LONG') {
+        const newTrailSL = candle.high - tPts
+        if (newTrailSL > trailSL) {
+          currentSL = newTrailSL
+          setActiveOrder(o => o ? { ...o, sl: newTrailSL, trailSL: newTrailSL } : o)
+        }
+      } else {
+        const newTrailSL = candle.low + tPts
+        if (newTrailSL < trailSL) {
+          currentSL = newTrailSL
+          setActiveOrder(o => o ? { ...o, sl: newTrailSL, trailSL: newTrailSL } : o)
+        }
+      }
+    }
+
+    const sl = currentSL
     const hit = (side === 'LONG')
       ? candle.high >= tp ? { win: true,  pnl: (tp - entry) * pv, exit: tp,  r: +(Math.abs(tp - entry) / Math.abs(entry - sl)).toFixed(1) }
       : candle.low  <= sl ? { win: false, pnl: (sl - entry) * pv, exit: sl,  r: -1 }
@@ -146,8 +186,12 @@ export default function PracticePage() {
       : candle.high >= sl ? { win: false, pnl: (entry - sl) * pv, exit: sl,  r: -1 }
       : null
     if (hit) {
+      const tradeId = crypto.randomUUID()
+      lastTradeIdRef.current = tradeId
+      setPendingGrade(null)
       setOrderResult(hit)
       addPaperTrade({
+        id: tradeId,
         symbol, side, entry, tp, sl,
         exit: hit.exit,
         pnl: hit.pnl, r: hit.r,
@@ -251,17 +295,31 @@ export default function PracticePage() {
 
   function handleConfirm() {
     if (!pendingOrder) return
+
+    // ── Validation: TP/SL must be on correct side of entry ────────────────
+    const { side, entry, tp, sl } = pendingOrder
+    if (side === 'LONG') {
+      if (tp <= entry) { setOrderValidError('Long TP must be above entry price'); return }
+      if (sl >= entry) { setOrderValidError('Long SL must be below entry price'); return }
+    } else {
+      if (tp >= entry) { setOrderValidError('Short TP must be below entry price'); return }
+      if (sl <= entry) { setOrderValidError('Short SL must be above entry price'); return }
+    }
+    setOrderValidError(null)
+
     const isMarket = pendingOrder.orderType === 'market'
     const currentCandleTime = candles.length > 0 ? candles[candles.length - 1].time : 0
+
+    const trailData = trailingEnabled ? { trailPts, trailSL: sl } : {}
 
     if (isMarket) {
       // In live mode, fill at actual current market price (not wherever user clicked)
       const fillPrice = (!replayMode && lastPrice != null) ? lastPrice : pendingOrder.entry
-      setActiveOrder({ ...pendingOrder, entry: fillPrice, filledAtCandleTime: currentCandleTime })
+      setActiveOrder({ ...pendingOrder, entry: fillPrice, filledAtCandleTime: currentCandleTime, ...trailData })
     } else {
       // Store placement time — live fill check will only trigger on candles that
       // start AFTER this time, preventing false fills from stale price ranges.
-      setAwaitingFill({ ...pendingOrder, placedAfterCandleTime: currentCandleTime })
+      setAwaitingFill({ ...pendingOrder, placedAfterCandleTime: currentCandleTime, ...trailData })
     }
     setPendingOrder(null)
   }
@@ -282,7 +340,11 @@ export default function PracticePage() {
     const risk = Math.abs(activeOrder.entry - activeOrder.sl)
     const r    = risk > 0 ? +(Math.abs(exitPrice - activeOrder.entry) / risk).toFixed(1) : 0
 
+    const tradeId = crypto.randomUUID()
+    lastTradeIdRef.current = tradeId
+    setPendingGrade(null)
     addPaperTrade({
+      id: tradeId,
       symbol, side: activeOrder.side,
       entry: activeOrder.entry, exit: exitPrice,
       tp: activeOrder.tp, sl: activeOrder.sl,
@@ -454,6 +516,26 @@ export default function PracticePage() {
 
         {/* Chart */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg)', minWidth: 0, position: 'relative' }}>
+
+          {/* ── Daily loss limit banner ─────────────────────────────────────── */}
+          {dailyLimitReached && !dailyLimitAck && (
+            <div style={{
+              background: 'rgba(239,68,68,0.15)', borderBottom: '1px solid rgba(239,68,68,0.4)',
+              padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+            }}>
+              <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: 700 }}>
+                ⚠ Daily loss limit reached (${DAILY_LOSS_LIMIT.toLocaleString()})
+                <span style={{ fontWeight: 400, marginLeft: '6px', color: 'rgba(239,68,68,0.8)' }}>
+                  Real prop accounts would be locked. Proceed with caution.
+                </span>
+              </span>
+              <button onClick={() => setDailyLimitAck(true)} style={{
+                padding: '4px 12px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)',
+                borderRadius: '5px', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit', flexShrink: 0,
+              }}>Acknowledge</button>
+            </div>
+          )}
+
           <div style={{ flex: 1, minHeight: 0 }}>
             <ChartContainer
               candles={candles}
@@ -517,6 +599,8 @@ export default function PracticePage() {
                   { label: 'Balance', val: fmt$(account.balance), color: 'var(--text)' },
                   { label: 'P&L', val: fmt$(account.balance - account.startingBalance, true), color: (account.balance - account.startingBalance) >= 0 ? '#22c55e' : '#ef4444' },
                   { label: 'Peak', val: fmt$(account.peakBalance), color: 'var(--text)' },
+                  { label: 'Daily P&L', val: fmt$(dailyTotalPnL, true), color: dailyTotalPnL >= 0 ? '#22c55e' : dailyTotalPnL <= -DAILY_LOSS_LIMIT ? '#ef4444' : '#f59e0b' },
+                  { label: 'Day Limit', val: fmt$(Math.max(0, DAILY_LOSS_LIMIT + dailyTotalPnL)) + ' left', color: dailyLimitReached ? '#ef4444' : 'var(--muted)' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>{r.label}</span>
@@ -628,6 +712,22 @@ export default function PracticePage() {
                 ))}
               </div>
 
+              {/* Trailing stop option */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', padding: '6px 0', borderTop: '1px solid var(--border)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={trailingEnabled} onChange={e => setTrailingEnabled(e.target.checked)}
+                    style={{ accentColor: '#f59e0b', cursor: 'pointer' }} />
+                  <span style={{ fontSize: '11px', color: trailingEnabled ? '#f59e0b' : 'var(--muted)', fontWeight: 600 }}>Trailing Stop</span>
+                </label>
+                {trailingEnabled && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input type="number" min="1" step="1" value={trailPts} onChange={e => setTrailPts(Math.max(1, +e.target.value))}
+                      style={{ width: '52px', background: 'var(--bg3)', border: '1px solid #f59e0b44', borderRadius: '4px', color: '#f59e0b', padding: '3px 6px', fontSize: '12px', fontWeight: 700, fontFamily: 'monospace', textAlign: 'right' }} />
+                    <span style={{ fontSize: '10px', color: 'var(--muted)' }}>pts</span>
+                  </div>
+                )}
+              </div>
+
               {orderMode && (
                 <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--muted)', textAlign: 'center' }}>
                   Click the chart to set{' '}
@@ -707,6 +807,18 @@ export default function PracticePage() {
                     : pendingOrder.orderType === 'stop'
                     ? `Order triggers when price hits ${pendingOrder.entry.toFixed(2)}`
                     : `Triggers at ${pendingOrder.stopTrigger?.toFixed(2)}, fills at ${pendingOrder.entry.toFixed(2)}`}
+                </div>
+              )}
+
+              {trailingEnabled && (
+                <div style={{ fontSize: '10px', color: '#f59e0b', marginBottom: '6px', background: 'rgba(245,158,11,0.08)', padding: '5px 8px', borderRadius: '5px' }}>
+                  Trailing stop: {trailPts} pts
+                </div>
+              )}
+
+              {orderValidError && (
+                <div style={{ fontSize: '11px', color: '#ef4444', marginBottom: '8px', background: 'rgba(239,68,68,0.1)', padding: '6px 8px', borderRadius: '5px', fontWeight: 600 }}>
+                  ⚠ {orderValidError}
                 </div>
               )}
 
@@ -837,6 +949,31 @@ export default function PracticePage() {
                   {accountMode === 'prop' ? 'Prop Account' : 'Paper Account'}
                 </span>
               </div>
+
+              {/* Grade picker */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '9px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '5px' }}>Grade this setup</div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {['A+', 'A', 'B', 'C'].map(g => {
+                    const gc = g === 'A+' ? '#22c55e' : g === 'A' ? '#4f8ef7' : g === 'B' ? '#f59e0b' : '#ef4444'
+                    const sel = pendingGrade === g
+                    return (
+                      <button key={g} onClick={() => {
+                        setPendingGrade(g)
+                        if (lastTradeIdRef.current) updatePaperTrade(lastTradeIdRef.current, { grade: g })
+                      }} style={{
+                        flex: 1, padding: '5px 4px', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit',
+                        border: `1px solid ${sel ? gc : 'var(--border)'}`,
+                        borderRadius: '4px', background: sel ? `${gc}22` : 'var(--bg3)',
+                        color: sel ? gc : 'var(--muted)', cursor: 'pointer',
+                      }}>
+                        {g}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               <button onClick={dismissResult} style={{ width: '100%', padding: '6px', border: '1px solid var(--border)', borderRadius: '5px', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '11px', fontFamily: 'inherit' }}>
                 Dismiss
               </button>

@@ -73,7 +73,7 @@ const useStore = create(
         drawings: [],
         indicators: { vwap: true, ema9: false, ema21: true, ema50: false, rsi: false, volume: true },
         smcLayers: { fvg: true, ob: true, liq: true },
-        sessions: { asia: false, london: false, ny: false, asiaHL: false, londonHL: false, nyHL: false },
+        sessions: { asia: false, london: false, ny: false, asiaHL: false, londonHL: false, nyHL: false, killZones: false },
         magnetEnabled: false,
         brStrategy: false,
         paperAccount: { startingBalance: 10000, balance: 10000, trades: [] },
@@ -209,7 +209,7 @@ const useStore = create(
         if (s._userId) syncSettings(s._userId, getSettingsPayload(s))
       },
 
-      sessions: { asia: false, london: false, ny: false, asiaHL: false, londonHL: false, nyHL: false },
+      sessions: { asia: false, london: false, ny: false, asiaHL: false, londonHL: false, nyHL: false, killZones: false },
       setSession: (key, val) => {
         set(s => ({ sessions: { ...s.sessions, [key]: val } }))
         const s = get()
@@ -326,9 +326,20 @@ const useStore = create(
         if (s._userId) syncPaperAccount(s._userId, s.paperAccount)
       },
 
+      updatePaperTrade: (id, patch) => {
+        set(s => ({
+          paperAccount: {
+            ...s.paperAccount,
+            trades: s.paperAccount.trades.map(t => t.id === id ? { ...t, ...patch } : t),
+          },
+        }))
+        const s = get()
+        if (s._userId) syncPaperAccount(s._userId, s.paperAccount)
+      },
+
       addPaperTrade: (trade) => {
         const date = (trade.date ?? new Date().toISOString()).split('T')[0]
-        const withId = { ...trade, id: crypto.randomUUID() }
+        const withId = { ...trade, id: trade.id ?? crypto.randomUUID() }
         set(s => {
           if (trade.accountType === 'prop') {
             const newBal  = s.account.balance + trade.pnl

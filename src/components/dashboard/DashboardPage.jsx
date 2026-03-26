@@ -3,6 +3,9 @@ import useStore from '../../store/index'
 import SessionClock from './SessionClock'
 import useCountUp from '../../hooks/useCountUp'
 import ConsistencyChart from '../proptracker/ConsistencyChart'
+import PositionSizer from './PositionSizer'
+import PerformanceBreakdown from './PerformanceBreakdown'
+import { EVENTS_BY_DATE, EVENT_COLORS } from '../../data/economicCalendar'
 
 function fmt$(n, sign = false) {
   const s = sign && n > 0 ? '+' : n < 0 ? '-' : ''
@@ -128,26 +131,55 @@ function EquityCurve({ dailyPnL, startingBalance }) {
   const points = dates.map(d => { bal += dailyPnL[d]; return bal })
 
   const W = 400, H = 90
-  const minV = Math.min(...points) * 0.999
-  const maxV = Math.max(...points) * 1.001
+  const LPAD = 52  // left padding for Y-axis labels
+  const chartW = W - LPAD
+  const minV = Math.min(startingBalance, ...points) * 0.999
+  const maxV = Math.max(startingBalance, ...points) * 1.001
   const range = maxV - minV || 1
-  function toX(i) { return (i / (points.length - 1)) * W }
-  function toY(v) { return 10 + 70 - ((v - minV) / range) * 70 }
+  function toX(i) { return LPAD + (i / (points.length - 1)) * chartW }
+  function toY(v) { return 8 + 72 - ((v - minV) / range) * 72 }
+
+  // Build peak array for drawdown shading
+  const peaks = []
+  let runPeak = startingBalance
+  for (const p of points) {
+    if (p > runPeak) runPeak = p
+    peaks.push(runPeak)
+  }
 
   const pathD = points.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
   const areaD = `${pathD} L ${toX(points.length - 1)} ${H} L ${toX(0)} ${H} Z`
+  // Drawdown fill: shade between peak and current equity
+  const ddPathD = points.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(peaks[i])}`).join(' ')
+    + ' ' + [...points].reverse().map((v, i) => `L ${toX(points.length - 1 - i)} ${toY(v)}`).join(' ') + ' Z'
+
   const lastBal = points[points.length - 1]
+  const peakBal = Math.max(...points)
   const isUp = lastBal >= startingBalance
   const lineColor = isUp ? 'var(--green-bright)' : 'var(--red-bright)'
   const gradId = `eq-grad-${isUp ? 'g' : 'r'}`
+
+  // Y-axis label values
+  const yLabels = [
+    { val: maxV, y: toY(maxV) },
+    { val: startingBalance, y: toY(startingBalance) },
+    { val: lastBal, y: toY(lastBal) },
+  ]
 
   return (
     <div className="card" style={{ marginBottom: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
         <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Equity Curve</span>
-        <span style={{ fontSize: '12px', fontFamily: 'monospace', color: lineColor, fontWeight: 600 }}>
-          {fmt$(lastBal - startingBalance, true)}
-        </span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'baseline' }}>
+          {peakBal > startingBalance && (
+            <span style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'monospace' }}>
+              Peak {fmt$(peakBal)}
+            </span>
+          )}
+          <span style={{ fontSize: '12px', fontFamily: 'monospace', color: lineColor, fontWeight: 600 }}>
+            {fmt$(lastBal - startingBalance, true)}
+          </span>
+        </div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: `${H}px`, display: 'block' }}>
         <defs>
@@ -156,9 +188,25 @@ function EquityCurve({ dailyPnL, startingBalance }) {
             <stop offset="100%" stopColor={lineColor} stopOpacity="0.02" />
           </linearGradient>
         </defs>
+
+        {/* Drawdown shading (red between peak and equity) */}
+        <path d={ddPathD} fill="rgba(239,68,68,0.12)" />
+
         <path d={areaD} fill={`url(#${gradId})`} />
         <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />
         <circle cx={toX(points.length - 1)} cy={toY(lastBal)} r="3" fill={lineColor} />
+
+        {/* Starting balance baseline */}
+        <line x1={LPAD} y1={toY(startingBalance)} x2={W} y2={toY(startingBalance)}
+          stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="3,3" />
+
+        {/* Y-axis labels */}
+        {yLabels.filter((l, i, arr) => arr.findIndex(x => Math.abs(x.y - l.y) < 10) === i).map((l, i) => (
+          <text key={i} x={LPAD - 3} y={Math.max(10, Math.min(H - 4, l.y + 4))}
+            textAnchor="end" fontSize="8" fill="rgba(100,110,140,0.85)" fontFamily="monospace">
+            {l.val >= 1000 ? `${(l.val / 1000).toFixed(0)}K` : l.val.toFixed(0)}
+          </text>
+        ))}
       </svg>
     </div>
   )
@@ -220,11 +268,12 @@ function RecentTrades({ trades }) {
     <div className="card" style={{ marginBottom: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <div style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Recent Trades</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '130px 50px 70px 50px', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.7px', textAlign: 'right' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '130px 50px 70px 50px 30px', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.7px', textAlign: 'right' }}>
           <span style={{ textAlign: 'left' }}>Entry → Exit</span>
           <span>Side</span>
           <span>P&amp;L</span>
           <span>R</span>
+          <span>Grade</span>
         </div>
       </div>
       {recent.map(t => (
@@ -238,7 +287,7 @@ function RecentTrades({ trades }) {
             </span>
             <span style={{ color: 'var(--text)', fontWeight: 500 }}>{(t.symbol || 'ES=F').replace('=F', '')}</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '130px 50px 70px 50px', textAlign: 'right' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 50px 70px 50px 30px', textAlign: 'right' }}>
             <span style={{ fontSize: '10px', color: 'var(--muted)', textAlign: 'left' }}>
               {t.entry?.toFixed(1)} → {t.exit?.toFixed(1)}
             </span>
@@ -250,6 +299,9 @@ function RecentTrades({ trades }) {
             </span>
             <span style={{ fontFamily: 'monospace', color: t.r > 0 ? 'var(--accent)' : 'var(--muted)', fontSize: '11px' }}>
               {t.r != null ? `${Number(t.r) > 0 ? '+' : ''}${Number(t.r).toFixed(1)}R` : '–'}
+            </span>
+            <span style={{ fontSize: '9px', fontWeight: 700, color: t.grade === 'A+' ? '#22c55e' : t.grade === 'A' ? '#4f8ef7' : t.grade === 'B' ? '#f59e0b' : t.grade === 'C' ? '#ef4444' : 'transparent' }}>
+              {t.grade ?? ''}
             </span>
           </div>
         </div>
@@ -513,22 +565,37 @@ function TradeCalendar({ trades, dailyPnL }) {
                          : pnl < 0 ? '1px solid rgba(239,68,68,0.3)'
                          : '1px solid var(--border)'
 
+            const econEvents = EVENTS_BY_DATE[dateStr] || []
+
             return (
               <div
                 key={dateStr}
                 onClick={() => hasTrades && setSelectedDay(dateStr)}
+                title={econEvents.length ? econEvents.map(e => `${e.label} ${e.time}: ${e.desc}`).join('\n') : undefined}
                 style={{
                   background: bg, border, borderRadius: '6px',
                   padding: '6px 5px 5px', minHeight: '64px',
                   cursor: hasTrades ? 'pointer' : 'default',
                   transition: 'filter 0.12s',
+                  position: 'relative',
                 }}
                 onMouseOver={e => { if (hasTrades) e.currentTarget.style.filter = 'brightness(1.15)' }}
                 onMouseOut={e => { e.currentTarget.style.filter = '' }}
               >
-                {/* Date number */}
-                <div style={{ fontSize: '11px', fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--accent)' : 'var(--muted)', marginBottom: '3px' }}>
-                  {day}
+                {/* Date number + economic events */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '3px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--accent)' : 'var(--muted)' }}>
+                    {day}
+                  </div>
+                  {econEvents.length > 0 && (
+                    <div style={{ display: 'flex', gap: '1px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {econEvents.slice(0, 2).map((ev, j) => (
+                        <span key={j} style={{ fontSize: '7px', fontWeight: 700, padding: '0px 3px', borderRadius: '2px', background: `${EVENT_COLORS[ev.label] ?? '#888'}33`, color: EVENT_COLORS[ev.label] ?? '#888', letterSpacing: '0.3px' }}>
+                          {ev.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* P&L */}
@@ -597,6 +664,9 @@ export default function DashboardPage() {
   const avgR        = trades.length > 0
     ? (trades.reduce((sum, t) => sum + (t.r || 0), 0) / trades.length).toFixed(1)
     : '–'
+  const grossProfit = trades.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0)
+  const grossLoss   = Math.abs(trades.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0))
+  const profitFactor = grossLoss === 0 ? (grossProfit > 0 ? '∞' : '–') : (grossProfit / grossLoss).toFixed(2)
   const tradingDays = Object.keys(dailyPnL).filter(d => dailyPnL[d] !== 0).length
   const allDayPnLs  = Object.values(dailyPnL)
   const bestDay     = allDayPnLs.length ? Math.max(...allDayPnLs) : 0
@@ -622,14 +692,18 @@ export default function DashboardPage() {
   const isProp   = mode === 'prop'
 
   // Stats bar: overall/historical summary — no overlap with the cards below
+  const pfColor = typeof profitFactor === 'string'
+    ? 'var(--muted)'
+    : profitFactor >= 1.5 ? 'var(--green-bright)' : profitFactor >= 1.0 ? 'var(--amber-bright, #f59e0b)' : 'var(--red-bright)'
   const statsBarItems = [
-    { label: 'Account',      value: isProp ? 'PROP' : 'PAPER',           color: isProp ? 'var(--accent)' : '#a78bfa' },
-    { label: 'Total P&L',    value: fmt$(totalPnL, true),                 color: totalPnL > 0 ? 'var(--green-bright)' : totalPnL < 0 ? 'var(--red-bright)' : 'var(--muted)' },
-    { label: 'Peak Balance', value: fmt$(peakBalance),                    color: 'var(--text)' },
-    { label: 'Avg R',        value: trades.length ? `${avgR}R` : '–',    color: 'var(--accent)' },
-    { label: 'Total Trades', value: String(trades.length),                color: 'var(--text)' },
-    { label: 'Trading Days', value: String(tradingDays),                  color: 'var(--text)' },
-    { label: 'Best Day',     value: bestDay > 0 ? fmt$(bestDay, true) : '–', color: bestDay > 0 ? 'var(--green-bright)' : 'var(--muted)' },
+    { label: 'Account',        value: isProp ? 'PROP' : 'PAPER',             color: isProp ? 'var(--accent)' : '#a78bfa' },
+    { label: 'Total P&L',      value: fmt$(totalPnL, true),                   color: totalPnL > 0 ? 'var(--green-bright)' : totalPnL < 0 ? 'var(--red-bright)' : 'var(--muted)' },
+    { label: 'Profit Factor',  value: String(profitFactor),                   color: pfColor },
+    { label: 'Peak Balance',   value: fmt$(peakBalance),                      color: 'var(--text)' },
+    { label: 'Avg R',          value: trades.length ? `${avgR}R` : '–',      color: 'var(--accent)' },
+    { label: 'Total Trades',   value: String(trades.length),                  color: 'var(--text)' },
+    { label: 'Trading Days',   value: String(tradingDays),                    color: 'var(--text)' },
+    { label: 'Best Day',       value: bestDay > 0 ? fmt$(bestDay, true) : '–', color: bestDay > 0 ? 'var(--green-bright)' : 'var(--muted)' },
   ]
 
   return (
@@ -736,6 +810,14 @@ export default function DashboardPage() {
 
       {/* Trade Calendar */}
       <TradeCalendar trades={trades} dailyPnL={dailyPnL} />
+
+      {/* Performance Breakdown */}
+      <PerformanceBreakdown trades={trades} />
+
+      {/* Position Sizer */}
+      <div style={{ marginTop: '12px' }}>
+        <PositionSizer />
+      </div>
     </div>
   )
 }

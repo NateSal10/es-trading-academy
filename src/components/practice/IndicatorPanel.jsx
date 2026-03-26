@@ -97,6 +97,24 @@ export default function IndicatorPanel() {
         ))}
       </div>
 
+      {/* Kill Zones */}
+      <div className="panel-section">
+        <div className="panel-title">ICT Kill Zones</div>
+        <div className="indicator-row">
+          <span className="indicator-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'linear-gradient(135deg,#38bdf8,#22c55e,#f59e0b,#ef4444)', display: 'inline-block', flexShrink: 0 }} />
+            Kill Zones
+          </span>
+          <Toggle checked={sessions.killZones} onChange={e => setSession('killZones', e.target.checked)} color="#38bdf8" />
+        </div>
+        <div style={{ paddingLeft: '16px', fontSize: '9px', color: 'var(--muted)', lineHeight: 1.6, marginTop: '-4px' }}>
+          <div style={{ color: '#38bdf8', fontWeight: 600 }}>London Open 7–10 AM UTC</div>
+          <div style={{ color: '#22c55e', fontWeight: 600 }}>NY Open 14:30–16 UTC</div>
+          <div style={{ color: '#f59e0b', fontWeight: 600 }}>NY Lunch 17–18 UTC</div>
+          <div style={{ color: '#ef4444', fontWeight: 600 }}>NY Close 20–21 UTC</div>
+        </div>
+      </div>
+
       {/* Strategies */}
       <div className="panel-section">
         <div className="panel-title">Strategies</div>

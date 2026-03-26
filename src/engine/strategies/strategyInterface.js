@@ -51,6 +51,34 @@ export function computeVWAP(candles, fromIndex, toIndex) {
  * Compute EMA for an array of numeric values.
  * Returns an array of the same length with EMA values.
  */
+/**
+ * Compute ATR (Average True Range) at a specific candle index.
+ * Returns the ATR value using a simple rolling mean (Wilder's can be added later).
+ * @param {Array} candles - full candle array
+ * @param {number} period - ATR period (default 14)
+ * @param {number} index - candle index to compute ATR at
+ */
+export function computeATR(candles, period = 14, index) {
+  const from = Math.max(1, index - period + 1)
+  const to   = Math.min(index, candles.length - 1)
+  if (to < from) return 0
+
+  let sum = 0
+  let count = 0
+  for (let i = from; i <= to; i++) {
+    const c    = candles[i]
+    const prev = candles[i - 1]
+    const tr   = Math.max(
+      c.high - c.low,
+      Math.abs(c.high - prev.close),
+      Math.abs(c.low  - prev.close)
+    )
+    sum += tr
+    count++
+  }
+  return count > 0 ? sum / count : 0
+}
+
 export function computeEMA(values, period) {
   if (!values || values.length === 0) return [];
 
