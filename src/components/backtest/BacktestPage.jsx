@@ -2,162 +2,76 @@ import { useState, useCallback } from 'react'
 import useStore from '../../store'
 import { useChartData } from '../../hooks/useChartData'
 import { runBacktest, getPointValue } from '../../engine/backtestEngine'
-import { openingRangeBreakout } from '../../engine/strategies/openingRangeBreakout'
-import { vwapBounce } from '../../engine/strategies/vwapBounce'
-import { ictSilverBullet } from '../../engine/strategies/ictSilverBullet'
-import { breakAndRetest } from '../../engine/strategies/breakAndRetest'
-import { tjrStrategy } from '../../engine/strategies/tjrStrategy'
-import { buildCustomStrategy } from '../../engine/strategies/customStrategyRunner'
-import StrategyChipBar from './StrategyChipBar'
-import NLBar from './NLBar'
+import { buildStrategy, computeBrZones } from '../../engine/ruleEngine'
 import ChartWithMarkers from './ChartWithMarkers'
-import ResultsTabs from './ResultsTabs'
-import CustomStrategyBuilder from './CustomStrategyBuilder'
+import BacktestResults from './BacktestResults'
+import RuleBuilder, { DEFAULT_RULE_CONFIG } from './RuleBuilder'
 
-const PRESET_STRATEGIES = [
-  openingRangeBreakout,
-  vwapBounce,
-  ictSilverBullet,
-  breakAndRetest,
-  tjrStrategy,
-]
+const SYMBOLS = ['ES=F', 'NQ=F', 'MES=F']
+const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h']
+
+const btnBase = {
+  border: 'none',
+  borderRadius: '6px',
+  padding: '6px 14px',
+  fontSize: '12px',
+  cursor: 'pointer',
+  fontWeight: 600,
+}
 
 export default function BacktestPage() {
-  const [selectedStrategy, setSelectedStrategy] = useState(null)
-  const [selectedVariant, setSelectedVariant] = useState(null)
   const [symbol, setSymbol] = useState('ES=F')
+  const [tf, setTf] = useState('5m')
+  const [startingBalance, setStartingBalance] = useState(10000)
+  const [ruleConfig, setRuleConfig] = useState(DEFAULT_RULE_CONFIG)
   const [results, setResults] = useState(null)
   const [running, setRunning] = useState(false)
-  const [customConfig, setCustomConfig] = useState(null)
-  const [showCustomModal, setShowCustomModal] = useState(false)
-  const [pineTabTrigger, setPineTabTrigger] = useState(null)
-  const [apiKeyMissing, setApiKeyMissing] = useState(false)
+  const [error, setError] = useState(null)
+  const [brZones, setBrZones] = useState([])
 
-  const strategyVariants = useStore((s) => s.strategyVariants)
-  const addVariant = useStore((s) => s.addVariant)
   const saveBacktestResult = useStore((s) => s.saveBacktestResult)
+  const { candles, loading, isLive } = useChartData(symbol, tf)
 
-  const nativeTf = selectedVariant
-    ? (PRESET_STRATEGIES.find((s) => s.id === selectedVariant.baseStrategy)?.defaultTimeframe ?? '5m')
-    : (selectedStrategy?.defaultTimeframe ?? '5m')
-
-  const { candles, loading } = useChartData(symbol, nativeTf)
-
-  const selectedId = selectedVariant?.id ?? selectedStrategy?.id ?? null
-  const canRun = !!(selectedStrategy || selectedVariant) && candles.length > 0 && !loading && !running
-
-  const handleSelectPreset = useCallback((strategy) => {
-    setSelectedStrategy(strategy)
-    setSelectedVariant(null)
-  }, [])
-
-  const handleSelectVariant = useCallback((variant) => {
-    setSelectedVariant(variant)
-    setSelectedStrategy(PRESET_STRATEGIES.find((s) => s.id === variant.baseStrategy) ?? null)
-  }, [])
-
-  const runWith = useCallback((strategy, params, label) => {
-    if (!candles.length) return
-    setRunning(true)
-    setTimeout(() => {
-      const config = {
-        startingBalance: 10000,
-        pointValue: getPointValue(symbol.replace('=F', '')),
-        contractQty: 1,
-        commission: 0,
-      }
-      const result = runBacktest(candles, strategy, params, config)
-      setResults({ ...result, strategyLabel: label })
-      saveBacktestResult({
-        strategyId: strategy.id,
-        strategyName: label,
-        symbol,
-        timeframe: nativeTf,
-        params,
-        metrics: result.metrics,
-        trades: result.trades,
-        equityCurve: result.equityCurve,
-      })
-      setRunning(false)
-    }, 50)
-  }, [candles, symbol, nativeTf, saveBacktestResult])
+  const pointValue = getPointValue(symbol.replace('=F', ''))
+  const canRun = candles.length > 0 && !loading && !running && ruleConfig.conditions.length > 0
 
   const handleRun = useCallback(() => {
     if (!canRun) return
-    if (selectedVariant) {
-      const isCustom = selectedVariant.baseStrategy === 'custom'
-      const strategy = isCustom
-        ? buildCustomStrategy(selectedVariant.config)
-        : (PRESET_STRATEGIES.find((s) => s.id === selectedVariant.baseStrategy) ?? selectedStrategy)
-      runWith(strategy, isCustom ? {} : selectedVariant.config, selectedVariant.name)
-    } else if (selectedStrategy?.id === 'custom') {
-      runWith(buildCustomStrategy(customConfig), {}, 'Custom Strategy')
-    } else if (selectedStrategy) {
-      const params = {}
-      for (const [key, def] of Object.entries(selectedStrategy.params ?? {})) {
-        params[key] = def.default ?? def.min ?? 0
+    setError(null)
+    setRunning(true)
+
+    setTimeout(() => {
+      try {
+        const strategy = buildStrategy(ruleConfig)
+        const config = {
+          startingBalance,
+          pointValue,
+          contractQty: 1,
+          commission: 0,
+        }
+        const result = runBacktest(candles, strategy, {}, config)
+        setResults(result)
+        setBrZones(computeBrZones(ruleConfig, candles))
+        saveBacktestResult({
+          strategyId: 'custom_rule',
+          strategyName: 'Custom Rule',
+          symbol,
+          timeframe: tf,
+          params: ruleConfig,
+          metrics: result.metrics,
+          trades: result.trades,
+          equityCurve: result.equityCurve,
+        })
+      } catch (err) {
+        setError(err.message || 'Backtest failed')
+      } finally {
+        setRunning(false)
       }
-      runWith(selectedStrategy, params, selectedStrategy.name)
-    }
-  }, [canRun, selectedStrategy, selectedVariant, customConfig, runWith])
-
-  const interpretNL = async (text) => {
-    const baseId = selectedStrategy?.id ?? 'custom'
-    const res = await fetch('/api/interpret-strategy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, baseStrategy: baseId }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      if (data.error?.includes('ANTHROPIC_API_KEY')) setApiKeyMissing(true)
-      throw new Error(data.error || 'Interpretation failed')
-    }
-    return data
-  }
-
-  const handleApplyAndRun = async (text) => {
-    const config = await interpretNL(text)
-    const strategy = buildCustomStrategy(config)
-    runWith(strategy, {}, `${selectedStrategy?.name ?? 'Custom'} (adjusted)`)
-  }
-
-  const handleSaveVariant = async (text, name) => {
-    const config = await interpretNL(text)
-    const willPrune = strategyVariants.length >= 20 &&
-      !strategyVariants.find((v) => v.name === name)
-    const variant = {
-      id: crypto.randomUUID(),
-      name,
-      baseStrategy: selectedStrategy?.id ?? 'custom',
-      config,
-      createdAt: new Date().toISOString(),
-    }
-    addVariant(variant)
-    if (willPrune) {
-      console.info('Oldest variant removed to stay under 20 limit')
-    }
-  }
-
-  const handlePineUse = useCallback((config) => {
-    setCustomConfig(config)
-    const strategy = buildCustomStrategy(config)
-    setSelectedStrategy({ ...strategy, name: 'Pine Script Strategy' })
-    setSelectedVariant(null)
-    setPineTabTrigger(null)
-  }, [])
-
-  const handleLoadHistory = useCallback((entry) => {
-    setResults({
-      trades: entry.trades,
-      equityCurve: entry.equityCurve,
-      metrics: entry.metrics,
-      strategyLabel: entry.strategyName,
-    })
-  }, [])
+    }, 50)
+  }, [canRun, candles, ruleConfig, symbol, tf, startingBalance, pointValue, saveBacktestResult])
 
   const overlayMetrics = results ? {
-    totalPnl: results.metrics?.totalPnl,
+    totalPnl: results.metrics?.totalPnL,
     winRate: results.metrics?.winRate,
     maxDrawdown: results.metrics?.maxDrawdown,
     totalTrades: results.metrics?.totalTrades,
@@ -165,79 +79,153 @@ export default function BacktestPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '80vh' }}>
-      <StrategyChipBar
-        presets={PRESET_STRATEGIES}
-        variants={strategyVariants}
-        selectedId={selectedId}
-        symbol={symbol}
-        onSelectPreset={handleSelectPreset}
-        onSelectVariant={handleSelectVariant}
-        onSymbolChange={setSymbol}
-        onPineScript={() => setPineTabTrigger('Pine Script')}
-        onNewStrategy={() => setShowCustomModal(true)}
-        onRun={handleRun}
-        running={running}
-        canRun={canRun}
-      />
 
-      <NLBar
-        strategyId={selectedStrategy?.id ?? 'custom'}
-        apiKeyMissing={apiKeyMissing}
-        onApplyAndRun={handleApplyAndRun}
-        onSaveVariant={handleSaveVariant}
-      />
-
-      <ChartWithMarkers
-        symbol={symbol}
-        nativeTf={nativeTf}
-        trades={results?.trades ?? null}
-        metrics={overlayMetrics}
-      />
-
-      <ResultsTabs
-        metrics={results?.metrics ?? null}
-        equityCurve={results?.equityCurve ?? null}
-        trades={results?.trades ?? null}
-        candles={candles}
-        strategyName={results?.strategyLabel ?? selectedStrategy?.name}
-        onSelectHistory={handleLoadHistory}
-        onPineUse={handlePineUse}
-        initialTab={pineTabTrigger}
-        onTabOpened={() => setPineTabTrigger(null)}
-      />
-
-      {showCustomModal && (
-        <div
+      {/* ── Config Bar ──────────────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '10px 16px',
+        background: 'var(--bg2)',
+        borderBottom: '1px solid var(--border)',
+        flexWrap: 'wrap',
+      }}>
+        {/* Symbol */}
+        <select
+          value={symbol}
+          onChange={(e) => { setSymbol(e.target.value); setResults(null) }}
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: '20px',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: '5px',
+            color: 'var(--text)',
+            padding: '5px 8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            outline: 'none',
           }}
-          onClick={() => setShowCustomModal(false)}
         >
-          <div
-            style={{ maxWidth: '600px', width: '100%', maxHeight: '80vh', overflowY: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <CustomStrategyBuilder
-              config={customConfig}
-              onChange={(cfg) => {
-                setCustomConfig(cfg)
-                setSelectedStrategy({ id: 'custom', name: 'Custom Strategy', defaultTimeframe: '5m', params: {} })
-                setSelectedVariant(null)
-              }}
-            />
+          {SYMBOLS.map((s) => <option key={s} value={s}>{s.replace('=F', '')}</option>)}
+        </select>
+
+        <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
+
+        {/* Timeframe */}
+        <div style={{ display: 'flex', gap: '3px' }}>
+          {TIMEFRAMES.map((t) => (
             <button
-              onClick={() => setShowCustomModal(false)}
+              key={t}
+              onClick={() => { setTf(t); setResults(null) }}
               style={{
-                width: '100%', marginTop: 8, padding: '8px',
-                background: 'var(--bg2)', color: 'var(--text)',
-                border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
+                ...btnBase,
+                padding: '4px 9px',
+                background: tf === t ? 'var(--accent)' : 'var(--card)',
+                color: tf === t ? '#fff' : 'var(--muted)',
+                border: '1px solid var(--border)',
               }}
             >
-              Done
+              {t}
             </button>
-          </div>
+          ))}
+        </div>
+
+        <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
+
+        {/* Starting Balance */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Balance</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>$</span>
+          <input
+            type="number"
+            min="1000"
+            step="1000"
+            value={startingBalance}
+            onChange={(e) => setStartingBalance(parseInt(e.target.value) || 10000)}
+            style={{
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '5px',
+              color: 'var(--text)',
+              padding: '4px 8px',
+              fontSize: '12px',
+              width: '80px',
+              outline: 'none',
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          />
+        </div>
+
+        {/* Data source badge */}
+        <span style={{
+          fontSize: '10px',
+          color: isLive ? 'var(--green-bright)' : 'var(--amber)',
+          background: isLive ? 'rgba(34,197,94,0.1)' : 'rgba(251,191,36,0.1)',
+          border: `1px solid ${isLive ? 'rgba(34,197,94,0.25)' : 'rgba(251,191,36,0.25)'}`,
+          borderRadius: '4px',
+          padding: '2px 7px',
+        }}>
+          {loading ? 'Loading…' : isLive ? 'Live' : 'Sim'}
+        </span>
+
+        {/* Run button */}
+        <button
+          onClick={handleRun}
+          disabled={!canRun}
+          style={{
+            ...btnBase,
+            marginLeft: 'auto',
+            background: canRun ? '#22c55e' : 'var(--bg2)',
+            color: canRun ? '#000' : 'var(--muted)',
+            border: canRun ? 'none' : '1px solid var(--border)',
+            minWidth: '80px',
+          }}
+        >
+          {running ? 'Running…' : '▶ Run'}
+        </button>
+      </div>
+
+      {/* ── Chart ────────────────────────────────────────────────────────────── */}
+      <ChartWithMarkers
+        symbol={symbol}
+        nativeTf={tf}
+        trades={results?.trades ?? null}
+        metrics={overlayMetrics}
+        brZones={brZones}
+      />
+
+      {/* ── Rule Builder ─────────────────────────────────────────────────────── */}
+      <div style={{ padding: '16px' }}>
+        <RuleBuilder
+          value={ruleConfig}
+          onChange={setRuleConfig}
+          pointValue={pointValue}
+        />
+      </div>
+
+      {/* ── Error ────────────────────────────────────────────────────────────── */}
+      {error && (
+        <div style={{
+          margin: '0 16px 16px',
+          padding: '10px 14px',
+          background: 'rgba(239,68,68,0.1)',
+          border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: '8px',
+          fontSize: '13px',
+          color: '#ef4444',
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* ── Results ──────────────────────────────────────────────────────────── */}
+      {results && (
+        <div style={{ padding: '0 16px 24px' }}>
+          <BacktestResults
+            metrics={results.metrics}
+            equityCurve={results.equityCurve}
+            trades={results.trades}
+          />
         </div>
       )}
     </div>

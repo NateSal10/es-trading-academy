@@ -2,6 +2,72 @@ import React, { useRef, useEffect, useState } from 'react';
 import { createChart, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts';
 import { useChartData } from '../../hooks/useChartData';
 
+// ── B&R Zone Box Primitive ────────────────────────────────────────────────────
+// Zones: { top, bot, startTime, label } — box extends from startTime to right edge
+
+class BrZoneRenderer {
+  constructor(src) { this._src = src }
+  draw(target) {
+    const { _series: s, _chart: c, _zones: zones } = this._src
+    if (!s || !c || !zones.length) return
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      const ts = c.timeScale()
+      zones.forEach(z => {
+        const topY = s.priceToCoordinate(z.top)
+        const botY = s.priceToCoordinate(z.bot)
+        if (topY == null || botY == null) return
+        const rawStartX = ts.timeToCoordinate(z.startTime)
+        if (rawStartX == null) return
+        const startX = Math.max(0, rawStartX)
+        const endX   = mediaSize.width + 4
+        const y = Math.min(topY, botY)
+        const h = Math.max(2, Math.abs(topY - botY))
+        const w = endX - startX
+        if (w <= 0) return
+        ctx.fillStyle = 'rgba(250,204,21,0.07)'
+        ctx.fillRect(startX, y, w, h)
+        ctx.strokeStyle = 'rgba(250,204,21,0.50)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 3])
+        ctx.strokeRect(startX + 0.5, y + 0.5, w, h)
+        ctx.setLineDash([])
+        // Midpoint dashed line
+        const midY = y + h / 2
+        ctx.strokeStyle = 'rgba(250,204,21,0.30)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([6, 4])
+        ctx.beginPath()
+        ctx.moveTo(startX, midY)
+        ctx.lineTo(endX, midY)
+        ctx.stroke()
+        ctx.setLineDash([])
+        // Label
+        ctx.fillStyle = 'rgba(250,204,21,0.70)'
+        ctx.font = 'bold 9px Inter, sans-serif'
+        ctx.fillText(z.label ?? 'B&R', startX + 4, y + Math.min(11, h - 2))
+      })
+    })
+  }
+}
+class BrZonePaneView {
+  constructor(src) { this._renderer = new BrZoneRenderer(src) }
+  renderer() { return this._renderer }
+  zOrder() { return 'bottom' }
+}
+class BrZonePrimitive {
+  constructor() {
+    this._zones = []; this._series = null; this._chart = null; this._request = null
+    this._views = [new BrZonePaneView(this)]
+  }
+  attached({ series, chart, requestUpdate }) {
+    this._series = series; this._chart = chart; this._request = requestUpdate
+  }
+  detached() { this._series = null; this._chart = null; this._request = null }
+  updateZones(zones) { this._zones = zones; this._request?.() }
+  paneViews() { return this._views }
+  updateAllViews() {}
+}
+
 const TF_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '4h'];
 
 function remapToCandle(candles, tradeTime) {
@@ -56,13 +122,19 @@ const metricStyle = {
   marginRight: '5px',
 };
 
-export default function ChartWithMarkers({ symbol, nativeTf, trades, metrics }) {
+export default function ChartWithMarkers({ symbol, nativeTf, trades, metrics, brZones }) {
   const [visualTf, setVisualTf] = useState(nativeTf || '5m');
   const { candles } = useChartData(symbol, visualTf);
   const containerRef = useRef(null);
   const chartRef = useRef(null);
+  const zonePrimRef = useRef(null);
 
   useEffect(() => { setVisualTf(nativeTf || '5m'); }, [nativeTf]);
+
+  // Update zone boxes without recreating the chart
+  useEffect(() => {
+    if (zonePrimRef.current) zonePrimRef.current.updateZones(brZones || []);
+  }, [brZones]);
 
   useEffect(() => {
     if (!candles?.length || !containerRef.current) return;
@@ -95,10 +167,16 @@ export default function ChartWithMarkers({ symbol, nativeTf, trades, metrics }) 
     const markers = buildMarkers(trades, candles);
     if (markers.length) createSeriesMarkers(series, markers);
 
+    // B&R zone overlay
+    const zonePrim = new BrZonePrimitive();
+    series.attachPrimitive(zonePrim);
+    zonePrimRef.current = zonePrim;
+    if (brZones?.length) zonePrim.updateZones(brZones);
+
     chart.timeScale().fitContent();
     chartRef.current = chart;
 
-    return () => { chart.remove(); chartRef.current = null; };
+    return () => { chart.remove(); chartRef.current = null; zonePrimRef.current = null; };
   }, [candles, trades]);
 
   const pnlPositive = (metrics?.totalPnl ?? 0) >= 0;
