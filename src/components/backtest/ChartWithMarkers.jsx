@@ -17,9 +17,10 @@ class BrZoneRenderer {
         const botY = s.priceToCoordinate(z.bot)
         if (topY == null || botY == null) return
         const rawStartX = ts.timeToCoordinate(z.startTime)
+        const rawEndX   = z.endTime ? ts.timeToCoordinate(z.endTime) : null
         if (rawStartX == null) return
         const startX = Math.max(0, rawStartX)
-        const endX   = mediaSize.width + 4
+        const endX   = rawEndX != null ? Math.min(mediaSize.width + 4, rawEndX) : mediaSize.width + 4
         const y = Math.min(topY, botY)
         const h = Math.max(2, Math.abs(topY - botY))
         const w = endX - startX
@@ -31,14 +32,14 @@ class BrZoneRenderer {
         ctx.setLineDash([4, 3])
         ctx.strokeRect(startX + 0.5, y + 0.5, w, h)
         ctx.setLineDash([])
-        // Midpoint dashed line
+        // Midpoint dashed line (stays within box bounds)
         const midY = y + h / 2
         ctx.strokeStyle = 'rgba(250,204,21,0.30)'
         ctx.lineWidth = 1
         ctx.setLineDash([6, 4])
         ctx.beginPath()
         ctx.moveTo(startX, midY)
-        ctx.lineTo(endX, midY)
+        ctx.lineTo(Math.min(endX, mediaSize.width + 4), midY)
         ctx.stroke()
         ctx.setLineDash([])
         // Label

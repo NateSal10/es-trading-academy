@@ -327,6 +327,14 @@ export function buildStrategy(ruleConfig) {
  */
 export function computeBrZones(ruleConfig, candles) {
   if (!ruleConfig?.conditions || !candles?.length) return []
+
+  // Track the last candle timestamp for each ET date (used to cap box right edge)
+  const lastCandleByDate = {}
+  for (const c of candles) {
+    const et = toET(c.time)
+    lastCandleByDate[et.dateStr] = c.time
+  }
+
   const zones = []
   for (const cond of ruleConfig.conditions) {
     if (cond.type !== 'br_zone') continue
@@ -345,11 +353,12 @@ export function computeBrZones(ruleConfig, candles) {
         }
       }
     }
-    for (const z of Object.values(daily)) {
+    for (const [dateStr, z] of Object.entries(daily)) {
       zones.push({
         top:       z.high,
         bot:       z.low,
         startTime: z.startTime,
+        endTime:   lastCandleByDate[dateStr] ?? z.startTime,
         label:     `B&R ${cond.startTime}`,
       })
     }
