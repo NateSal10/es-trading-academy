@@ -104,7 +104,7 @@ Falls back to `buildSimCandles()` on any fetch failure. Returns `{candles, loadi
 All 12 concepts have pages: `CandlesPage`, `StructurePage`, `FVGPage`, `LiquidityPage`, `OrderBlocksPage`, `BreakRetestPage`, `PremiumDiscountPage`, `SessionsPage`, `VWAPPage`, `RiskPage`, `PowerOf3Page`, `ConfluencePage`.
 
 ### Styling
-Single flat CSS file `src/styles/globals.css`. CSS custom properties on `:root`. No CSS modules, no Tailwind.
+Single flat CSS file `src/styles/globals.css`. CSS custom properties on `:root`. Project is now powered by **Tailwind CSS v4** (`@tailwindcss/vite`), allowing inline utility styling alongside base variables.
 Color tokens: `--green`, `--red`, `--blue`, `--amber`, `--purple` + `*-bg` variants.
 Auth styles: `.auth-page`, `.auth-card`, `.auth-input`, `.auth-button`, `.auth-error`, `.auth-message`, `.auth-links`.
 Header user styles: `.user-email`, `.signout-btn`.

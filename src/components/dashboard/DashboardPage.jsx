@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import useStore from '../../store/index'
 import SessionClock from './SessionClock'
 import useCountUp from '../../hooks/useCountUp'
 import ConsistencyChart from '../proptracker/ConsistencyChart'
-import PositionSizer from './PositionSizer'
-import PerformanceBreakdown from './PerformanceBreakdown'
 import { EVENTS_BY_DATE, EVENT_COLORS } from '../../data/economicCalendar'
 
 function fmt$(n, sign = false) {
@@ -707,7 +706,12 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div className="page">
+    <motion.div 
+      className="page"
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+    >
       <StatsBar items={statsBarItems} />
 
       {/* Account toggle */}
@@ -810,14 +814,6 @@ export default function DashboardPage() {
 
       {/* Trade Calendar */}
       <TradeCalendar trades={trades} dailyPnL={dailyPnL} />
-
-      {/* Performance Breakdown */}
-      <PerformanceBreakdown trades={trades} />
-
-      {/* Position Sizer */}
-      <div style={{ marginTop: '12px' }}>
-        <PositionSizer />
-      </div>
-    </div>
+    </motion.div>
   )
 }

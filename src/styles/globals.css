@@ -175,12 +175,20 @@ body{
 
 /* Cards */
 .card{
-  background:var(--card);
-  border:1px solid var(--border);
+  background:rgba(15, 17, 23, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border:1px solid rgba(28, 31, 46, 0.5);
+  border-top:1px solid rgba(255, 255, 255, 0.1);
   border-radius:10px;
   padding:20px 24px;
   margin-bottom:16px;
-  box-shadow:0 2px 16px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow:0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow:0 12px 40px 0 rgba(0, 0, 0, 0.45);
 }
 .card-title{
   font-size:16px;
@@ -361,11 +369,19 @@ svg.chart{overflow:visible;width:100%;display:block}
 
 /* Stat cards (dashboard / journal) */
 .stat-card{
-  background:var(--card);
-  border:1px solid var(--border);
+  background:rgba(15, 17, 23, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border:1px solid rgba(28, 31, 46, 0.5);
+  border-top:1px solid rgba(255, 255, 255, 0.1);
   border-radius:10px;
   padding:16px 20px;
   text-align:center;
+  box-shadow:0 4px 16px 0 rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s ease;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
 }
 .stat-card .stat-num{
   font-size:26px;

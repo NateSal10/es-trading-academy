@@ -375,8 +375,8 @@ const CHART_OPTIONS = {
   },
   crosshair: {
     mode: CrosshairMode.Normal,
-    vertLine: { color: '#4f8ef7', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1a2340' },
-    horzLine: { color: '#4f8ef7', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1a2340' },
+    vertLine: { color: '#4f8ef7', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1a2340', labelVisible: true },
+    horzLine: { color: '#4f8ef7', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1a2340', labelVisible: true },
   },
   timeScale: {
     borderColor: '#1c1f2e',
@@ -463,8 +463,14 @@ export default function ChartContainer({
 
     // ── ET 12-hour time display ───────────────────────────────────────────────
     // All timestamps are UTC; display converted to America/New_York (handles DST)
-    const toET = (ts, opts) =>
-      new Date(ts * 1000).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts })
+    const toET = (ts, opts) => {
+      try {
+        let t = typeof ts === 'number' ? ts * 1000 : (ts.year ? Date.UTC(ts.year, ts.month - 1, ts.day) : new Date(ts).valueOf());
+        return new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts });
+      } catch (e) {
+        return '';
+      }
+    };
 
     chart.applyOptions({
       localization: {
@@ -481,7 +487,7 @@ export default function ChartContainer({
         if (tickMarkType === 0) return toET(ts, { year: 'numeric' })
         if (tickMarkType === 1) return toET(ts, { month: 'short', year: 'numeric' })
         if (tickMarkType === 2) return toET(ts, { month: 'short', day: 'numeric' })
-        return toET(ts, { hour: 'numeric', minute: '2-digit', hour12: true })
+        return toET(ts, { hour: 'numeric', minute: '2-digit', hour12: true }) // short time
       },
     })
 
@@ -1170,7 +1176,7 @@ export default function ChartContainer({
 
   return (
     <div
-      style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', cursor }}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', cursor, paddingBottom: 16 }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
