@@ -87,7 +87,13 @@ Falls back to `buildSimCandles()` on any fetch failure. Returns `{candles, loadi
   - Session H/L lines via `createPriceLine()`, Liquidity via `createPriceLine()`
   - Time axis uses ET 12-hour format via `tickMarkFormatter` + `localization.timeFormatter` with `America/New_York`
 - `PracticePage.jsx` — toolbar (symbol, timeframe, tools), two-column layout, replay state
-  - Order types: `market | limit | stop | stop_limit` — non-market orders in replay sit as `awaitingFill` and check fill conditions per advancing candle
+  - Order types: `market | limit | stop | stop_limit` — Use `<ChartContainer>` instead of vanilla TradingView widgets for SMC zones and replay controls
+- Dashboard runs on `<DashboardPage>` which displays `<DrawdownMeter>`, `<RecentTrades>`, `<ConsistencyChart>`, and `<TradeCalendar>` (PerformanceBreakdown & PositionSizer were removed)
+
+### Recent Visual & Architecture Upgrades
+- **UI System**: Deployed Glassmorphism across the `.card` ecosystem using deep drop shadows and `rgba` backdrop filters.
+- **Animations**: Integrated `framer-motion` for cascade-reveals on page loads.
+- **Charts**: Lightweight-charts `tickMarkFormatter` and `timeFormatter` have been patched with strict `BusinessDay` type checks to ensure the X-axis and crosshairs always render accurately intraday vs daily.
   - `awaitingFill` state: `{ type, side, entry, stopTrigger, tp, sl, symbol }`
   - Fill logic: limit=price reaches entry; stop=price breaks trigger; stop_limit=trigger hit then entry filled
 - `ReplayControls.jsx` — play/pause/step/reset, speed selector (0.5×/1×/2×/4×/8×), timestamps in ET 12hr
