@@ -1,0 +1,164 @@
+<h2>Results Section Layout</h2>
+<p class="subtitle">After running the backtest, what should the analysis look like?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:12px;border-radius:4px;font-family:monospace;font-size:10px">
+
+      <!-- Stat row -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:6px">
+        <div style="background:#1a2744;border-radius:3px;padding:6px;text-align:center">
+          <div style="color:#7eb8f7;font-size:8px">Net P&L</div>
+          <div style="color:#2ecc71;font-size:12px;font-weight:bold">+$2,340</div>
+        </div>
+        <div style="background:#1a2744;border-radius:3px;padding:6px;text-align:center">
+          <div style="color:#7eb8f7;font-size:8px">Win Rate</div>
+          <div style="color:#fff;font-size:12px;font-weight:bold">62%</div>
+        </div>
+        <div style="background:#1a2744;border-radius:3px;padding:6px;text-align:center">
+          <div style="color:#7eb8f7;font-size:8px">Profit Factor</div>
+          <div style="color:#fff;font-size:12px;font-weight:bold">1.84</div>
+        </div>
+        <div style="background:#1a2744;border-radius:3px;padding:6px;text-align:center">
+          <div style="color:#7eb8f7;font-size:8px">Max DD</div>
+          <div style="color:#e74c3c;font-size:12px;font-weight:bold">-8.2%</div>
+        </div>
+        <div style="background:#1a2744;border-radius:3px;padding:6px;text-align:center">
+          <div style="color:#7eb8f7;font-size:8px">Trades</div>
+          <div style="color:#fff;font-size:12px;font-weight:bold">47</div>
+        </div>
+      </div>
+
+      <!-- Equity curve -->
+      <div style="background:#0d1f3c;border-radius:3px;height:70px;margin-bottom:6px;padding:6px;position:relative">
+        <div style="color:#7eb8f7;font-size:8px;margin-bottom:4px">Equity Curve</div>
+        <svg width="100%" height="45" viewBox="0 0 300 45">
+          <polyline points="0,40 30,38 60,35 90,30 120,32 150,25 180,20 210,22 240,15 270,10 300,8" fill="none" stroke="#2ecc71" stroke-width="2"/>
+          <polyline points="0,40 30,38 60,35 90,30 120,32 150,25 180,20 210,22 240,15 270,10 300,8" fill="url(#grad)" stroke="none" opacity="0.2"/>
+          <defs><linearGradient id="grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2ecc71"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs>
+        </svg>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <div style="background:#7eb8f7;color:#000;padding:3px 8px;border-radius:2px;font-size:8px;font-weight:bold">All Trades</div>
+        <div style="background:#1a2744;color:#7eb8f7;padding:3px 8px;border-radius:2px;font-size:8px">Winners</div>
+        <div style="background:#1a2744;color:#7eb8f7;padding:3px 8px;border-radius:2px;font-size:8px">Losers</div>
+        <div style="background:#1a2744;color:#7eb8f7;padding:3px 8px;border-radius:2px;font-size:8px">By Day</div>
+        <div style="background:#1a2744;color:#7eb8f7;padding:3px 8px;border-radius:2px;font-size:8px">By Hour</div>
+      </div>
+
+      <!-- Trade table -->
+      <div style="background:#0d1f3c;border-radius:3px;padding:6px">
+        <div style="display:grid;grid-template-columns:60px 40px 60px 60px 60px 60px;gap:2px;margin-bottom:3px">
+          <div style="color:#555;font-size:8px">Date</div>
+          <div style="color:#555;font-size:8px">Side</div>
+          <div style="color:#555;font-size:8px">Entry</div>
+          <div style="color:#555;font-size:8px">Exit</div>
+          <div style="color:#555;font-size:8px">P&L</div>
+          <div style="color:#555;font-size:8px">Result</div>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 40px 60px 60px 60px 60px;gap:2px;margin-bottom:2px">
+          <div style="color:#aaa;font-size:8px">Jan 3</div>
+          <div style="color:#2ecc71;font-size:8px">LONG</div>
+          <div style="color:#aaa;font-size:8px">4,782</div>
+          <div style="color:#aaa;font-size:8px">4,808</div>
+          <div style="color:#2ecc71;font-size:8px">+$650</div>
+          <div style="color:#2ecc71;font-size:8px">WIN</div>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 40px 60px 60px 60px 60px;gap:2px">
+          <div style="color:#aaa;font-size:8px">Jan 5</div>
+          <div style="color:#e74c3c;font-size:8px">SHORT</div>
+          <div style="color:#aaa;font-size:8px">4,801</div>
+          <div style="color:#aaa;font-size:8px">4,821</div>
+          <div style="color:#e74c3c;font-size:8px">-$250</div>
+          <div style="color:#e74c3c;font-size:8px">LOSS</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Stats + Equity + Trade Log (Recommended)</h3>
+      <p>Key stats at top, equity curve below, then filterable trade log. Mirrors TradingView's Strategy Tester. Everything in one scrollable view.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:12px;border-radius:4px;font-family:monospace;font-size:10px">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <!-- Left: Stats -->
+        <div style="background:#0d1f3c;border-radius:3px;padding:8px">
+          <div style="color:#7eb8f7;font-size:8px;margin-bottom:6px;text-transform:uppercase">Performance</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#aaa;font-size:8px">Net P&L</span><span style="color:#2ecc71;font-size:8px">+$2,340</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#aaa;font-size:8px">Win Rate</span><span style="color:#fff;font-size:8px">62%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#aaa;font-size:8px">Profit Factor</span><span style="color:#fff;font-size:8px">1.84</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#aaa;font-size:8px">Avg Win</span><span style="color:#2ecc71;font-size:8px">+$312</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#aaa;font-size:8px">Avg Loss</span><span style="color:#e74c3c;font-size:8px">-$182</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#aaa;font-size:8px">Expectancy</span><span style="color:#fff;font-size:8px">+$49</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#aaa;font-size:8px">Max DD</span><span style="color:#e74c3c;font-size:8px">-8.2%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:#aaa;font-size:8px">Sharpe Ratio</span><span style="color:#fff;font-size:8px">1.42</span>
+          </div>
+        </div>
+        <!-- Right: Charts -->
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="background:#0d1f3c;border-radius:3px;flex:1;padding:5px">
+            <div style="color:#7eb8f7;font-size:8px;margin-bottom:2px">Equity Curve</div>
+            <svg width="100%" height="35" viewBox="0 0 200 35">
+              <polyline points="0,30 30,28 60,24 90,20 120,22 150,16 200,8" fill="none" stroke="#2ecc71" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <div style="background:#0d1f3c;border-radius:3px;flex:1;padding:5px">
+            <div style="color:#7eb8f7;font-size:8px;margin-bottom:2px">Win/Loss by Hour</div>
+            <div style="display:flex;align-items:flex-end;gap:2px;height:35px">
+              <div style="background:#2ecc71;width:12px;height:20px;opacity:0.8"></div>
+              <div style="background:#e74c3c;width:12px;height:8px;opacity:0.8"></div>
+              <div style="background:#2ecc71;width:12px;height:28px;opacity:0.8"></div>
+              <div style="background:#2ecc71;width:12px;height:15px;opacity:0.8"></div>
+              <div style="background:#e74c3c;width:12px;height:12px;opacity:0.8"></div>
+              <div style="background:#2ecc71;width:12px;height:32px;opacity:0.8"></div>
+              <div style="background:#e74c3c;width:12px;height:5px;opacity:0.8"></div>
+            </div>
+          </div>
+          <div style="background:#0d1f3c;border-radius:3px;flex:1;padding:5px">
+            <div style="color:#7eb8f7;font-size:8px;margin-bottom:2px">P&L Distribution</div>
+            <div style="display:flex;align-items:flex-end;gap:1px;height:30px">
+              <div style="background:#e74c3c;width:10px;height:10px;opacity:0.7"></div>
+              <div style="background:#e74c3c;width:10px;height:18px;opacity:0.7"></div>
+              <div style="background:#aaa;width:10px;height:8px;opacity:0.7"></div>
+              <div style="background:#2ecc71;width:10px;height:25px;opacity:0.7"></div>
+              <div style="background:#2ecc71;width:10px;height:30px;opacity:0.7"></div>
+              <div style="background:#2ecc71;width:10px;height:18px;opacity:0.7"></div>
+              <div style="background:#2ecc71;width:10px;height:10px;opacity:0.7"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#0d1f3c;border-radius:3px;padding:5px">
+        <div style="color:#7eb8f7;font-size:8px;margin-bottom:3px">Trade Log</div>
+        <div style="color:#555;font-size:8px">47 trades — scroll to view...</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Stats + Multiple Charts + Log</h3>
+      <p>Full stats panel alongside multiple mini-charts: equity curve, win/loss by hour, P&L distribution. More analytical depth, like a prop firm dashboard.</p>
+    </div>
+  </div>
+
+</div>

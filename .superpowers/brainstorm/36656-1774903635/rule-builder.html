@@ -1,0 +1,123 @@
+<h2>Visual Rule Builder</h2>
+<p class="subtitle">This replaces all the premade strategies. You define your own entry conditions.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:12px;border-radius:4px;font-family:monospace;font-size:10px">
+
+      <div style="background:#0d1f3c;border-radius:4px;padding:10px">
+
+        <!-- Entry conditions -->
+        <div style="color:#7eb8f7;font-size:9px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Entry Conditions</div>
+
+        <div style="background:#111827;border-radius:3px;padding:8px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+          <div style="background:#1a2744;padding:3px 7px;border-radius:3px;color:#7eb8f7;font-size:9px;min-width:50px;text-align:center">IF</div>
+          <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px">Price</div>
+          <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px">crosses above</div>
+          <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px">EMA 20</div>
+          <div style="margin-left:auto;color:#555;font-size:9px;cursor:pointer">✕</div>
+        </div>
+
+        <div style="background:#111827;border-radius:3px;padding:8px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+          <div style="background:#2d1a44;padding:3px 7px;border-radius:3px;color:#b07ef7;font-size:9px;min-width:50px;text-align:center">AND</div>
+          <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px">Time</div>
+          <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px">is between</div>
+          <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px">9:30 AM – 11:00 AM ET</div>
+          <div style="margin-left:auto;color:#555;font-size:9px;cursor:pointer">✕</div>
+        </div>
+
+        <div style="border:1px dashed #2a3a5a;border-radius:3px;padding:6px;text-align:center;color:#3a5a8a;font-size:9px;margin-bottom:10px;cursor:pointer">+ Add condition</div>
+
+        <!-- Direction -->
+        <div style="color:#7eb8f7;font-size:9px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Direction</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <div style="background:#1a3a2a;border:1px solid #2ecc71;padding:4px 12px;border-radius:3px;color:#2ecc71;font-size:9px">LONG</div>
+          <div style="background:#1a2744;padding:4px 12px;border-radius:3px;color:#555;font-size:9px">SHORT</div>
+          <div style="background:#1a2744;padding:4px 12px;border-radius:3px;color:#555;font-size:9px">BOTH</div>
+        </div>
+
+        <!-- SL / TP -->
+        <div style="color:#7eb8f7;font-size:9px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Exit Rules</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="background:#111827;border-radius:3px;padding:6px">
+            <div style="color:#e74c3c;font-size:8px;margin-bottom:3px">Stop Loss</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px;flex:1">10 pts</div>
+              <div style="color:#555;font-size:8px">= $500</div>
+            </div>
+          </div>
+          <div style="background:#111827;border-radius:3px;padding:6px">
+            <div style="color:#2ecc71;font-size:8px;margin-bottom:3px">Take Profit</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div style="background:#1e2d45;padding:3px 7px;border-radius:3px;color:#e2e8f0;font-size:9px;flex:1">20 pts</div>
+              <div style="color:#555;font-size:8px">= $1,000</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Condition Builder (Recommended)</h3>
+      <p>Dropdown rows: "IF [indicator] [operator] [value] AND/OR ...". Define SL/TP in points. Simple, readable, no coding. Closest to NinjaTrader's Strategy Builder.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:12px;border-radius:4px;font-family:monospace;font-size:10px">
+      <div style="background:#0d1f3c;border-radius:4px;padding:10px">
+
+        <div style="color:#7eb8f7;font-size:9px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Strategy Setup</div>
+
+        <div style="margin-bottom:8px">
+          <div style="color:#aaa;font-size:8px;margin-bottom:3px">Entry Signal</div>
+          <div style="background:#111827;border-radius:3px;padding:5px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            <div>
+              <div style="color:#555;font-size:7px;margin-bottom:2px">Indicator</div>
+              <div style="background:#1e2d45;padding:3px 6px;border-radius:2px;color:#e2e8f0;font-size:8px">EMA Cross</div>
+            </div>
+            <div>
+              <div style="color:#555;font-size:7px;margin-bottom:2px">Period</div>
+              <div style="background:#1e2d45;padding:3px 6px;border-radius:2px;color:#e2e8f0;font-size:8px">20</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:8px">
+          <div style="color:#aaa;font-size:8px;margin-bottom:3px">Time Filter</div>
+          <div style="background:#111827;border-radius:3px;padding:5px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            <div style="background:#1e2d45;padding:3px 6px;border-radius:2px;color:#e2e8f0;font-size:8px">9:30 AM</div>
+            <div style="background:#1e2d45;padding:3px 6px;border-radius:2px;color:#e2e8f0;font-size:8px">11:00 AM</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:8px">
+          <div style="color:#aaa;font-size:8px;margin-bottom:3px">Direction</div>
+          <div style="background:#111827;border-radius:3px;padding:5px">
+            <div style="background:#1e2d45;padding:3px 6px;border-radius:2px;color:#2ecc71;font-size:8px;display:inline-block">Long Only</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div>
+            <div style="color:#aaa;font-size:8px;margin-bottom:3px">Stop Loss (pts)</div>
+            <div style="background:#111827;border-radius:3px;padding:5px">
+              <div style="background:#1e2d45;padding:3px 6px;border-radius:2px;color:#e74c3c;font-size:8px">10</div>
+            </div>
+          </div>
+          <div>
+            <div style="color:#aaa;font-size:8px;margin-bottom:3px">Take Profit (pts)</div>
+            <div style="background:#111827;border-radius:3px;padding:5px">
+              <div style="background:#1e2d45;padding:3px 6px;border-radius:2px;color:#2ecc71;font-size:8px">20</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Form-Based Config</h3>
+      <p>Simple form fields: pick one indicator type, set its parameters, set time filter, set SL/TP. Less flexible than A but even simpler to use.</p>
+    </div>
+  </div>
+
+</div>
