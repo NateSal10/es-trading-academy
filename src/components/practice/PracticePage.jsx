@@ -3,6 +3,8 @@ import { useChartData, TF_CONFIG } from '../../hooks/useChartData'
 import ChartContainer from './ChartContainer'
 import ReplayControls from './ReplayControls'
 import IndicatorPanel from './IndicatorPanel'
+import WatchlistPanel from './WatchlistPanel'
+import AccountManager from './AccountManager'
 import useStore from '../../store'
 
 const TIMEFRAMES = Object.keys(TF_CONFIG)
@@ -58,8 +60,14 @@ export default function PracticePage() {
   const [speed,       setSpeed]       = useState(1)
   const [drawingTool, setDrawingTool] = useState(null)  // null | 'hline' | 'line' | 'box'
 
-  // Account mode
-  const [accountMode,     setAccountMode]     = useState('prop')
+  // Account mode — derived from active named account
+  const namedAccounts      = useStore(s => s.namedAccounts)
+  const activeAccountId    = useStore(s => s.activeAccountId)
+  const setActiveAccount   = useStore(s => s.setActiveAccount)
+  const activeNamedAccount = namedAccounts.find(a => a.id === activeAccountId) ?? namedAccounts[0]
+  const accountMode        = activeNamedAccount?.type ?? 'prop'
+
+  const [showAccountManager, setShowAccountManager] = useState(false)
   const [showPaperConfig, setShowPaperConfig] = useState(false)
   const [balanceInput,    setBalanceInput]    = useState('')
 
@@ -408,8 +416,13 @@ export default function PracticePage() {
     }
   }
 
-  const displayBalance = accountMode === 'prop' ? account.balance       : paperAccount.balance
-  const displayStart   = accountMode === 'prop' ? account.startingBalance : paperAccount.startingBalance
+  // Use named account data for display (default accounts mirror legacy account/paperAccount)
+  const displayBalance = activeAccountId === 'default-prop'  ? account.balance
+                       : activeAccountId === 'default-paper' ? paperAccount.balance
+                       : activeNamedAccount?.balance ?? 0
+  const displayStart   = activeAccountId === 'default-prop'  ? account.startingBalance
+                       : activeAccountId === 'default-paper' ? paperAccount.startingBalance
+                       : activeNamedAccount?.startingBalance ?? 0
   const displayPnL     = displayBalance - displayStart
 
   const hasActiveFlow = !!pendingOrder || !!awaitingFill || !!activeOrder
@@ -604,22 +617,25 @@ export default function PracticePage() {
           </span>
         )}
 
-        {/* Account toggle + balance */}
+        {/* Active account + balance */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-            {['prop', 'paper'].map(m => (
-              <button key={m} onClick={() => setAccountMode(m)} style={{
-                padding: '4px 10px', fontSize: '11px', fontWeight: 700, border: 'none',
-                borderLeft: m === 'paper' ? '1px solid var(--border)' : 'none',
-                cursor: 'pointer', fontFamily: 'inherit',
-                background: accountMode === m ? (m === 'prop' ? 'var(--accent)' : '#7c3aed') : 'var(--bg3)',
-                color: accountMode === m ? '#fff' : 'var(--muted)',
-                transition: 'all .15s',
-              }}>
-                {m === 'prop' ? 'Prop' : 'Paper'}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setShowAccountManager(true)}
+            title="Switch or manage accounts"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 6,
+              background: 'var(--bg3)', cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: accountMode === 'prop' ? 'var(--accent)' : '#7c3aed',
+            }} />
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {activeNamedAccount?.name ?? 'Account'}
+            </span>
+          </button>
           <span style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'monospace', color: displayPnL >= 0 ? '#22c55e' : '#ef4444' }}>
             {fmt$(displayBalance)}{displayPnL !== 0 && <span style={{ fontSize: '11px' }}> ({fmt$(displayPnL, true)})</span>}
           </span>
@@ -696,62 +712,48 @@ export default function PracticePage() {
           background: 'var(--bg)', overflow: 'hidden auto', borderLeft: '1px solid var(--border)',
         }}>
 
+          {/* ── Watchlist ───────────────────────────────────────────────────── */}
+          <div style={{ padding: '10px 10px 0' }}>
+            <WatchlistPanel
+              activeSymbol={symbol}
+              onSelectSymbol={(sym) => { setSymbol(sym); setOrderMode(null); setPendingOrder(null) }}
+            />
+          </div>
+
           {/* ── Account panel ──────────────────────────────────────────────── */}
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: 600 }}>
-                {accountMode === 'prop' ? 'Prop Account' : 'Paper Account'}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)' }}>
+                  {activeNamedAccount?.name ?? 'Account'}
+                </div>
+                <div style={{ fontSize: '9px', color: accountMode === 'prop' ? 'var(--accent)' : '#a78bfa', textTransform: 'uppercase', fontWeight: 600, marginTop: 1 }}>
+                  {accountMode}
+                </div>
               </div>
-              <button onClick={() => accountMode === 'prop' ? handleResetProp() : setShowPaperConfig(v => !v)}
+              <button onClick={() => setShowAccountManager(true)}
                 style={{ fontSize: '10px', padding: '3px 8px', border: '1px solid var(--border)', borderRadius: '4px', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                {accountMode === 'prop' ? 'Reset' : showPaperConfig ? 'Done' : 'Configure'}
+                Accounts
               </button>
             </div>
 
-            {accountMode === 'prop' && (
-              <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                {[
-                  { label: 'Balance', val: fmt$(account.balance), color: 'var(--text)' },
-                  { label: 'P&L', val: fmt$(account.balance - account.startingBalance, true), color: (account.balance - account.startingBalance) >= 0 ? '#22c55e' : '#ef4444' },
-                  { label: 'Peak', val: fmt$(account.peakBalance), color: 'var(--text)' },
-                  { label: 'Daily P&L', val: fmt$(dailyTotalPnL, true), color: dailyTotalPnL >= 0 ? '#22c55e' : dailyTotalPnL <= -DAILY_LOSS_LIMIT ? '#ef4444' : '#f59e0b' },
-                  { label: 'Day Limit', val: fmt$(Math.max(0, DAILY_LOSS_LIMIT + dailyTotalPnL)) + ' left', color: dailyLimitReached ? '#ef4444' : 'var(--muted)' },
-                ].map(r => (
-                  <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{r.label}</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: r.color }}>{r.val}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {accountMode === 'paper' && (
-              <>
-                <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  {[
-                    { label: 'Balance', val: fmt$(paperAccount.balance), color: 'var(--text)' },
-                    { label: 'P&L', val: fmt$(paperAccount.balance - paperAccount.startingBalance, true), color: (paperAccount.balance - paperAccount.startingBalance) >= 0 ? '#22c55e' : '#ef4444' },
-                    { label: 'Starting', val: fmt$(paperAccount.startingBalance), color: 'var(--muted)' },
-                  ].map(r => (
-                    <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{r.label}</span>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: r.color }}>{r.val}</span>
-                    </div>
-                  ))}
+            <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              {(accountMode === 'prop' ? [
+                { label: 'Balance',   val: fmt$(displayBalance),      color: 'var(--text)' },
+                { label: 'P&L',       val: fmt$(displayPnL, true),    color: displayPnL >= 0 ? '#22c55e' : '#ef4444' },
+                { label: 'Daily P&L', val: fmt$(dailyTotalPnL, true), color: dailyTotalPnL >= 0 ? '#22c55e' : dailyTotalPnL <= -DAILY_LOSS_LIMIT ? '#ef4444' : '#f59e0b' },
+                { label: 'Day Limit', val: fmt$(Math.max(0, DAILY_LOSS_LIMIT + dailyTotalPnL)) + ' left', color: dailyLimitReached ? '#ef4444' : 'var(--muted)' },
+              ] : [
+                { label: 'Balance',  val: fmt$(displayBalance),   color: 'var(--text)' },
+                { label: 'P&L',      val: fmt$(displayPnL, true), color: displayPnL >= 0 ? '#22c55e' : '#ef4444' },
+                { label: 'Starting', val: fmt$(displayStart),     color: 'var(--muted)' },
+              ]).map(r => (
+                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{r.label}</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: r.color }}>{r.val}</span>
                 </div>
-                {showPaperConfig && (
-                  <div style={{ marginTop: '10px', padding: '10px', background: 'var(--bg3)', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Custom Balance</div>
-                    <input type="number" placeholder={String(paperAccount.startingBalance)} value={balanceInput} onChange={e => setBalanceInput(e.target.value)}
-                      style={{ width: '100%', padding: '5px 8px', background: 'var(--bg)', border: '1px solid var(--border2)', borderRadius: '4px', color: 'var(--text)', fontSize: '12px', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: '6px' }} />
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <button onClick={handleResetPaper} style={{ flex: 1, padding: '6px', border: 'none', borderRadius: '4px', background: '#7c3aed', color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>Reset & Apply</button>
-                      <button onClick={handleSetPaperBalance} style={{ flex: 1, padding: '6px', border: '1px solid var(--border)', borderRadius: '4px', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '11px', fontFamily: 'inherit' }}>Set Only</button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+              ))}
+            </div>
           </div>
 
           {/* ── Order entry ───────────────────────────────────────────────────── */}
@@ -1061,7 +1063,7 @@ export default function PracticePage() {
               </div>
               <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '10px' }}>
                 Credited to: <span style={{ color: accountMode === 'prop' ? 'var(--accent)' : '#7c3aed', fontWeight: 700 }}>
-                  {accountMode === 'prop' ? 'Prop Account' : 'Paper Account'}
+                  {activeNamedAccount?.name ?? (accountMode === 'prop' ? 'Prop Account' : 'Paper Account')}
                 </span>
               </div>
 
@@ -1121,6 +1123,9 @@ export default function PracticePage() {
           )}
         </div>
       </div>
+
+      {/* Account Manager modal */}
+      {showAccountManager && <AccountManager onClose={() => setShowAccountManager(false)} />}
     </div>
   )
 }

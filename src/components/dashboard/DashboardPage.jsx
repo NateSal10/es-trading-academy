@@ -621,11 +621,17 @@ function TradeCalendar({ trades, dailyPnL }) {
 }
 
 export default function DashboardPage() {
-  const [mode, setMode] = useState('prop')
   const todayStr = new Date().toISOString().split('T')[0]
-  const account      = useStore(s => s.account)
-  const paperAccount = useStore(s => s.paperAccount)
-  const allTrades    = paperAccount.trades
+  const account        = useStore(s => s.account)
+  const paperAccount   = useStore(s => s.paperAccount)
+  const namedAccounts  = useStore(s => s.namedAccounts)
+  const activeAccId    = useStore(s => s.activeAccountId)
+  const setActiveAcc   = useStore(s => s.setActiveAccount)
+  const allTrades      = paperAccount.trades
+
+  // Derive mode from whichever named account is selected
+  const selectedAcc  = namedAccounts.find(a => a.id === activeAccId) ?? namedAccounts[0]
+  const mode         = selectedAcc?.type ?? 'prop'
 
   const trades = useMemo(
     () => allTrades.filter(t => t.accountType === mode),
@@ -633,6 +639,10 @@ export default function DashboardPage() {
   )
 
   const dailyPnL = useMemo(() => {
+    // For named accounts (non-default), use their own dailyPnL
+    if (activeAccId !== 'default-prop' && activeAccId !== 'default-paper') {
+      return selectedAcc?.dailyPnL ?? {}
+    }
     if (mode === 'prop') return account.dailyPnL
     const map = {}
     trades.forEach(t => {
@@ -640,20 +650,23 @@ export default function DashboardPage() {
       if (d) map[d] = (map[d] || 0) + (t.pnl || 0)
     })
     return map
-  }, [mode, account.dailyPnL, trades])
+  }, [mode, activeAccId, account.dailyPnL, trades, selectedAcc])
 
-  const balance     = mode === 'prop' ? account.balance     : paperAccount.balance
-  const startingBal = mode === 'prop' ? account.startingBalance : paperAccount.startingBalance
+  const balance = activeAccId === 'default-prop'  ? account.balance
+               : activeAccId === 'default-paper' ? paperAccount.balance
+               : selectedAcc?.balance ?? 0
+  const startingBal = activeAccId === 'default-prop'  ? account.startingBalance
+                    : activeAccId === 'default-paper' ? paperAccount.startingBalance
+                    : selectedAcc?.startingBalance ?? 0
   const peakBalance = useMemo(() => {
-    if (mode === 'prop') return account.peakBalance
-    let running = startingBal
-    let peak = startingBal
-    for (const t of trades) {
-      running += (t.pnl || 0)
-      if (running > peak) peak = running
+    if (activeAccId === 'default-prop') return account.peakBalance
+    if (activeAccId === 'default-paper') {
+      let running = startingBal, peak = startingBal
+      for (const t of trades) { running += (t.pnl || 0); if (running > peak) peak = running }
+      return peak
     }
-    return peak
-  }, [mode, account.peakBalance, startingBal, trades])
+    return selectedAcc?.peakBalance ?? startingBal
+  }, [activeAccId, account.peakBalance, startingBal, trades, selectedAcc])
 
   const todayPnL    = dailyPnL[todayStr] || 0
   const todayTrades = trades.filter(t => (t.date || '').startsWith(todayStr))
@@ -714,34 +727,29 @@ export default function DashboardPage() {
     >
       <StatsBar items={statsBarItems} />
 
-      {/* Account toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-            {[
-              { id: 'prop',  label: 'Prop Account' },
-              { id: 'paper', label: 'Paper Account' },
-            ].map(m => (
-              <button key={m.id} onClick={() => setMode(m.id)} style={{
-                padding: '7px 18px', fontSize: '12px', fontWeight: 600, border: 'none',
-                borderLeft: m.id === 'paper' ? '1px solid var(--border)' : 'none',
-                cursor: 'pointer', fontFamily: 'inherit',
-                background: mode === m.id ? (m.id === 'prop' ? 'var(--accent)' : '#7c3aed') : 'var(--bg3)',
-                color: mode === m.id ? '#fff' : 'var(--muted)',
+      {/* Account selector */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {namedAccounts.map(acc => (
+            <button
+              key={acc.id}
+              onClick={() => setActiveAcc(acc.id)}
+              style={{
+                padding: '6px 14px', fontSize: '12px', fontWeight: 600,
+                border: `1px solid ${acc.id === activeAccId ? (acc.type === 'prop' ? 'var(--accent)' : '#7c3aed') : 'var(--border)'}`,
+                borderRadius: '7px', cursor: 'pointer', fontFamily: 'inherit',
+                background: acc.id === activeAccId ? (acc.type === 'prop' ? 'rgba(79,142,247,0.15)' : 'rgba(124,58,237,0.15)') : 'var(--bg3)',
+                color: acc.id === activeAccId ? (acc.type === 'prop' ? 'var(--accent)' : '#a78bfa') : 'var(--muted)',
                 transition: 'all .15s',
-              }}>
-                {m.label}
-              </button>
-            ))}
-          </div>
+              }}
+            >
+              {acc.name}
+            </button>
+          ))}
           <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-            {trades.length} total trade{trades.length !== 1 ? 's' : ''}
+            {trades.length} trade{trades.length !== 1 ? 's' : ''}
             {trades.length > 0 && (
-              <span> · Avg {avgR}R · P&amp;L{' '}
-                <span style={{ fontWeight: 700, fontFamily: 'monospace', color: totalPnL >= 0 ? 'var(--green-bright)' : 'var(--red-bright)' }}>
-                  {fmt$(totalPnL, true)}
-                </span>
-              </span>
+              <span> · Avg {avgR}R · <span style={{ fontWeight: 700, fontFamily: 'monospace', color: totalPnL >= 0 ? 'var(--green-bright)' : 'var(--red-bright)' }}>{fmt$(totalPnL, true)}</span></span>
             )}
           </div>
         </div>

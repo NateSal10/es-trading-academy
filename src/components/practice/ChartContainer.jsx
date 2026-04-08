@@ -592,8 +592,8 @@ export default function ChartContainer({
           scaleMargins: { top: 0.1, bottom: 0.1 },
           minimumWidth: 64,
         },
-        width:  rsiElRef.current.clientWidth,
-        height: rsiElRef.current.clientHeight || 100,
+        width:  rsiElRef.current.clientWidth || 400,
+        height: 108,
         handleScroll: true,
         handleScale: true,
       })
@@ -1330,17 +1330,17 @@ export default function ChartContainer({
     >
       <div ref={mainElRef} style={{ flex: 1, minHeight: 0 }} />
 
-      {/* RSI sub-pane */}
-      {indicators?.rsi && (
-        <div style={{ position: 'relative', flexShrink: 0 }}>
+      {/* RSI sub-pane — always mounted so chart is created at startup; CSS-hidden when off */}
+      <div style={{ flexShrink: 0, overflow: 'hidden', height: indicators?.rsi ? 108 : 0, transition: 'height 0.15s ease' }}>
+        <div style={{ position: 'relative', height: 108 }}>
           <div style={{
-            position: 'absolute', top: 4, left: 8, zIndex: 5,
+            position: 'absolute', top: 6, left: 8, zIndex: 5,
             fontSize: '10px', fontWeight: 700, color: '#7b68ee',
             pointerEvents: 'none', fontFamily: 'Inter, sans-serif',
           }}>RSI(14)</div>
-          <div ref={rsiElRef} style={{ height: 100, width: '100%', borderTop: '1px solid #1a2030' }} />
+          <div ref={rsiElRef} style={{ height: 108, width: '100%', borderTop: '1px solid #1a2030' }} />
         </div>
-      )}
+      </div>
 
       {/* TradingView-style crosshair time label on x-axis */}
       {crosshairTime && (

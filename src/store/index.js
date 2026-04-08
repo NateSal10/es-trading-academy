@@ -308,6 +308,59 @@ const useStore = create(
 
       clearVariants: () => set({ strategyVariants: [] }),
 
+      // ─── WATCHLIST ─────────────────────────────────────────────────
+      watchlist: ['ES=F', 'NQ=F', 'MES=F'],
+      addToWatchlist: (symbol) => set(s => ({
+        watchlist: s.watchlist.includes(symbol) ? s.watchlist : [...s.watchlist, symbol],
+      })),
+      removeFromWatchlist: (symbol) => set(s => ({
+        watchlist: s.watchlist.filter(t => t !== symbol),
+      })),
+
+      // ─── NAMED ACCOUNTS ────────────────────────────────────────────
+      // Each: { id, name, type: 'prop'|'paper', startingBalance, balance, peakBalance, dailyPnL:{} }
+      namedAccounts: [
+        { id: 'default-prop',  name: 'Prop 50K',       type: 'prop',  startingBalance: 50000, balance: 50000, peakBalance: 50000, dailyPnL: {} },
+        { id: 'default-paper', name: 'Paper Trading',  type: 'paper', startingBalance: 10000, balance: 10000, peakBalance: 10000, dailyPnL: {} },
+      ],
+      activeAccountId: 'default-prop',
+      createNamedAccount: (name, type, startingBalance) => set(s => ({
+        namedAccounts: [...s.namedAccounts, {
+          id: crypto.randomUUID(), name, type,
+          startingBalance, balance: startingBalance,
+          peakBalance: startingBalance, dailyPnL: {},
+        }],
+      })),
+      deleteNamedAccount: (id) => set(s => {
+        if (id === 'default-prop' || id === 'default-paper') return {}
+        return {
+          namedAccounts: s.namedAccounts.filter(a => a.id !== id),
+          activeAccountId: s.activeAccountId === id ? 'default-prop' : s.activeAccountId,
+        }
+      }),
+      renameNamedAccount: (id, name) => set(s => ({
+        namedAccounts: s.namedAccounts.map(a => a.id === id ? { ...a, name } : a),
+      })),
+      setActiveAccount: (id) => set({ activeAccountId: id }),
+      updateNamedAccountPnL: (id, pnl, date) => set(s => {
+        const acc = s.namedAccounts.find(a => a.id === id)
+        if (!acc) return {}
+        const newBalance = acc.balance + pnl
+        const newPeak = Math.max(acc.peakBalance, newBalance)
+        const prev = acc.dailyPnL[date] || 0
+        return {
+          namedAccounts: s.namedAccounts.map(a => a.id === id ? {
+            ...a, balance: newBalance, peakBalance: newPeak,
+            dailyPnL: { ...a.dailyPnL, [date]: prev + pnl },
+          } : a),
+        }
+      }),
+      resetNamedAccount: (id) => set(s => ({
+        namedAccounts: s.namedAccounts.map(a => a.id === id ? {
+          ...a, balance: a.startingBalance, peakBalance: a.startingBalance, dailyPnL: {},
+        } : a),
+      })),
+
       // Paper trading account
       paperAccount: { startingBalance: 10000, balance: 10000, trades: [] },
       setPaperStartingBalance: (bal) => {
@@ -341,11 +394,22 @@ const useStore = create(
         const date = (trade.date ?? new Date().toISOString()).split('T')[0]
         const withId = { ...trade, id: trade.id ?? crypto.randomUUID() }
         set(s => {
+          // Update the named account P&L for the active account
+          const activeAcc = s.namedAccounts.find(a => a.id === s.activeAccountId)
+          const updatedNamed = activeAcc ? s.namedAccounts.map(a => {
+            if (a.id !== s.activeAccountId) return a
+            const newBal  = a.balance + trade.pnl
+            const newPeak = Math.max(a.peakBalance, newBal)
+            const prev    = a.dailyPnL[date] || 0
+            return { ...a, balance: newBal, peakBalance: newPeak, dailyPnL: { ...a.dailyPnL, [date]: prev + trade.pnl } }
+          }) : s.namedAccounts
+
           if (trade.accountType === 'prop') {
             const newBal  = s.account.balance + trade.pnl
             const newPeak = Math.max(s.account.peakBalance, newBal)
             const prevDay = s.account.dailyPnL[date] || 0
             return {
+              namedAccounts: updatedNamed,
               account: {
                 ...s.account,
                 balance: newBal,
@@ -359,6 +423,7 @@ const useStore = create(
             }
           }
           return {
+            namedAccounts: updatedNamed,
             paperAccount: {
               ...s.paperAccount,
               balance: s.paperAccount.balance + trade.pnl,
@@ -393,6 +458,9 @@ const useStore = create(
         paperAccount: s.paperAccount,
         backtestHistory: s.backtestHistory,
         strategyVariants: s.strategyVariants,
+        watchlist: s.watchlist,
+        namedAccounts: s.namedAccounts,
+        activeAccountId: s.activeAccountId,
       }),
     }
   )
