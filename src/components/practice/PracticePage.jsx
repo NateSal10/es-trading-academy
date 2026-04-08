@@ -756,27 +756,24 @@ export default function PracticePage() {
             </div>
           </div>
 
-          {/* ── Order entry ───────────────────────────────────────────────────── */}
+          {/* ── Order entry (TV-style) ─────────────────────────────────────── */}
           {!hasActiveFlow && (
-            <div style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px', fontWeight: 600 }}>
-                Order Type
-              </div>
+            <div style={{ padding: '12px', borderBottom: '1px solid var(--border)' }}>
 
-              {/* Order type selector */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '10px' }}>
+              {/* Order type pills */}
+              <div style={{ display: 'flex', gap: '3px', marginBottom: '10px' }}>
                 {ORDER_TYPES.map(ot => (
                   <button
                     key={ot.id}
                     onClick={() => setOrderType(ot.id)}
                     title={ot.desc}
                     style={{
-                      padding: '6px 4px', fontSize: '11px', fontWeight: 600, fontFamily: 'inherit',
-                      border: `1px solid ${orderType === ot.id ? 'var(--accent)' : 'var(--border)'}`,
-                      borderRadius: '5px',
-                      background: orderType === ot.id ? 'rgba(79,142,247,0.12)' : 'var(--bg3)',
-                      color: orderType === ot.id ? '#4f8ef7' : 'var(--muted)',
-                      cursor: 'pointer', transition: 'all .15s',
+                      flex: 1, padding: '5px 0', fontSize: '10px', fontWeight: 700, fontFamily: 'inherit',
+                      border: `1px solid ${orderType === ot.id ? '#2a3f6e' : 'transparent'}`,
+                      borderRadius: '4px',
+                      background: orderType === ot.id ? '#101828' : 'transparent',
+                      color: orderType === ot.id ? '#7eb5f7' : '#4a5580',
+                      cursor: 'pointer', transition: 'all .12s', letterSpacing: '0.3px',
                     }}
                   >
                     {ot.label}
@@ -784,270 +781,371 @@ export default function PracticePage() {
                 ))}
               </div>
 
-              {/* Order type description */}
-              <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '10px', lineHeight: 1.5, minHeight: '28px' }}>
-                {ORDER_TYPES.find(o => o.id === orderType)?.desc}
+              {/* Buy / Sell (TV-style full-width buttons) */}
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                {['LONG', 'SHORT'].map(side => {
+                  const isActive = orderMode === side
+                  const isGreen  = side === 'LONG'
+                  return (
+                    <button
+                      key={side}
+                      onClick={() => {
+                        if (orderType === 'market') {
+                          const entryPrice = livePrice ?? lastPrice
+                          if (entryPrice == null) return
+                          const stop = DEFAULT_STOP_PTS
+                          const tp = side === 'LONG' ? entryPrice + stop * 2 : entryPrice - stop * 2
+                          const sl = side === 'LONG' ? entryPrice - stop     : entryPrice + stop
+                          setPendingOrder({ side, orderType: 'market', entry: entryPrice, tp, sl })
+                        } else {
+                          setOrderMode(orderMode === side ? null : side)
+                        }
+                      }}
+                      style={{
+                        flex: 1, padding: '11px 6px', fontFamily: 'inherit',
+                        border: 'none',
+                        borderRadius: '5px',
+                        background: isGreen ? (isActive ? '#166534' : '#14532d') : (isActive ? '#7f1d1d' : '#450a0a'),
+                        color: isGreen ? (isActive ? '#4ade80' : '#22c55e') : (isActive ? '#f87171' : '#ef4444'),
+                        cursor: 'pointer', fontSize: '13px', fontWeight: 700, transition: 'all .12s',
+                        boxShadow: isActive ? `0 0 0 1px ${isGreen ? '#22c55e55' : '#ef444455'}` : 'none',
+                      }}
+                    >
+                      {side === 'LONG' ? '▲ Buy' : '▼ Sell'}
+                    </button>
+                  )
+                })}
               </div>
 
-              <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px', fontWeight: 600 }}>
-                {replayMode ? 'Place Trade (Replay)' : 'Place Trade'}
-                {' '}
-                <span style={{ color: accountMode === 'prop' ? 'var(--accent)' : '#7c3aed', fontSize: '9px' }}>
-                  [{accountMode === 'prop' ? 'PROP' : 'PAPER'}]
-                </span>
-              </div>
+              {livePrice && (
+                <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--muted)', marginBottom: '8px', fontFamily: 'monospace' }}>
+                  Market: <span style={{ color: 'var(--text)', fontWeight: 700 }}>{livePrice.toFixed(2)}</span>
+                </div>
+              )}
 
-              {/* Long / Short */}
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {['LONG', 'SHORT'].map(side => (
-                  <button
-                    key={side}
-                    onClick={() => {
-                      if (orderType === 'market') {
-                        // Market: place immediately at current price, no chart click needed
-                        const entryPrice = livePrice ?? lastPrice
-                        if (entryPrice == null) return
-                        const stop = DEFAULT_STOP_PTS
-                        const tp = side === 'LONG' ? entryPrice + stop * 2 : entryPrice - stop * 2
-                        const sl = side === 'LONG' ? entryPrice - stop     : entryPrice + stop
-                        setPendingOrder({ side, orderType: 'market', entry: entryPrice, tp, sl })
-                      } else {
-                        setOrderMode(orderMode === side ? null : side)
-                      }
-                    }}
-                    style={{
-                      flex: 1, padding: '10px 6px', fontFamily: 'inherit',
-                      border: `1px solid ${orderMode === side ? (side === 'LONG' ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)') : 'var(--border)'}`,
-                      borderRadius: '6px',
-                      background: orderMode === side ? (side === 'LONG' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)') : 'var(--bg3)',
-                      color: orderMode === side ? (side === 'LONG' ? '#22c55e' : '#ef4444') : '#5a6080',
-                      cursor: 'pointer', fontSize: '13px', fontWeight: 700, transition: 'all .15s',
-                    }}
-                  >
-                    {side === 'LONG' ? '▲ Long' : '▼ Short'}
-                  </button>
-                ))}
-              </div>
+              {orderMode && (
+                <div style={{ fontSize: '10px', color: '#7eb5f7', textAlign: 'center', padding: '5px 8px', background: 'rgba(79,142,247,0.07)', borderRadius: '4px', marginBottom: '6px' }}>
+                  Click chart to set {orderType === 'limit' ? 'limit price' : orderType === 'stop' ? 'stop trigger' : 'stop trigger'}
+                </div>
+              )}
 
-              {/* Trailing stop option */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', padding: '6px 0', borderTop: '1px solid var(--border)' }}>
+              {/* Trailing stop */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--border)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}>
                   <input type="checkbox" checked={trailingEnabled} onChange={e => setTrailingEnabled(e.target.checked)}
                     style={{ accentColor: '#f59e0b', cursor: 'pointer' }} />
-                  <span style={{ fontSize: '11px', color: trailingEnabled ? '#f59e0b' : 'var(--muted)', fontWeight: 600 }}>Trailing Stop</span>
+                  <span style={{ fontSize: '11px', color: trailingEnabled ? '#f59e0b' : 'var(--muted)', fontWeight: 600 }}>Trail Stop</span>
                 </label>
                 {trailingEnabled && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <input type="number" min="1" step="1" value={trailPts} onChange={e => setTrailPts(Math.max(1, +e.target.value))}
-                      style={{ width: '52px', background: 'var(--bg3)', border: '1px solid #f59e0b44', borderRadius: '4px', color: '#f59e0b', padding: '3px 6px', fontSize: '12px', fontWeight: 700, fontFamily: 'monospace', textAlign: 'right' }} />
+                      style={{ width: '48px', background: 'var(--bg3)', border: '1px solid #f59e0b44', borderRadius: '4px', color: '#f59e0b', padding: '3px 6px', fontSize: '12px', fontWeight: 700, fontFamily: 'monospace', textAlign: 'right' }} />
                     <span style={{ fontSize: '10px', color: 'var(--muted)' }}>pts</span>
                   </div>
                 )}
               </div>
-
-              {orderMode && (
-                <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--muted)', textAlign: 'center' }}>
-                  Click the chart to set{' '}
-                  {orderType === 'limit' ? 'limit price'
-                    : orderType === 'stop' ? 'stop trigger price'
-                    : 'stop trigger price'}
-                </div>
-              )}
             </div>
           )}
 
-          {/* ── Pending order ticket ────────────────────────────────────────── */}
+          {/* ── Pending order ticket (TV-style) ─────────────────────────────── */}
           {pendingOrder && (
-            <div style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: pendingOrder.side === 'LONG' ? '#22c55e' : '#ef4444' }} />
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: pendingOrder.side === 'LONG' ? '#22c55e' : '#ef4444' }}>
-                    {pendingOrder.side}
-                  </span>
-                </div>
-                <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: 'rgba(79,142,247,0.1)', color: '#4f8ef7', fontWeight: 700, letterSpacing: '0.5px' }}>
+            <div style={{
+              margin: '10px',
+              border: `1px solid ${pendingOrder.side === 'LONG' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
+              borderLeft: `3px solid ${pendingOrder.side === 'LONG' ? '#22c55e' : '#ef4444'}`,
+              borderRadius: '6px',
+              background: pendingOrder.side === 'LONG' ? 'rgba(22,163,74,0.04)' : 'rgba(220,38,38,0.04)',
+              overflow: 'hidden',
+            }}>
+              {/* Ticket header */}
+              <div style={{
+                padding: '8px 12px',
+                background: pendingOrder.side === 'LONG' ? 'rgba(22,163,74,0.10)' : 'rgba(220,38,38,0.10)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: pendingOrder.side === 'LONG' ? '#4ade80' : '#f87171', letterSpacing: '0.5px' }}>
+                  {pendingOrder.side === 'LONG' ? '▲ LONG' : '▼ SHORT'}
+                </span>
+                <span style={{ fontSize: '10px', color: '#6b7a9e', background: 'rgba(255,255,255,0.05)', padding: '2px 7px', borderRadius: '3px', fontWeight: 600 }}>
                   {ORDER_TYPES.find(o => o.id === pendingOrder.orderType)?.label.toUpperCase()}
                 </span>
               </div>
 
-              {/* Price inputs */}
-              {[
-                // Stop-limit shows trigger + limit; others show entry
-                ...(pendingOrder.orderType === 'stop_limit' ? [
-                  { label: 'Stop Trigger', val: pendingOrder.stopTrigger, color: '#f59e0b', key: 'stopTrigger' },
-                  { label: 'Limit Price',  val: pendingOrder.entry,       color: '#4f8ef7', key: 'entry' },
-                ] : [
-                  {
-                    label: pendingOrder.orderType === 'limit' ? 'Limit Price'
-                         : pendingOrder.orderType === 'stop'  ? 'Stop Price'
-                         : 'Entry',
-                    val: pendingOrder.entry, color: '#4f8ef7', key: 'entry',
-                  },
-                ]),
-                { label: 'Take Profit', val: pendingOrder.tp, color: '#22c55e', key: 'tp' },
-                { label: 'Stop Loss',   val: pendingOrder.sl, color: '#ef4444', key: 'sl' },
-              ].map(row => (
-                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{row.label}</span>
-                  <input
-                    type="number" step="0.25" value={row.val}
-                    onChange={e => handleUpdateOrder({ [row.key]: +e.target.value })}
-                    style={{
-                      width: '80px', background: 'var(--bg3)', border: `1px solid ${row.color}33`,
-                      borderRadius: '4px', color: row.color, padding: '3px 6px',
-                      fontSize: '12px', fontWeight: 700, fontFamily: 'monospace', textAlign: 'right',
-                    }}
-                  />
-                </div>
-              ))}
+              {/* Price rows */}
+              <div style={{ padding: '8px 12px' }}>
+                {[
+                  ...(pendingOrder.orderType === 'stop_limit' ? [
+                    { label: 'Trigger', val: pendingOrder.stopTrigger, color: '#f59e0b', key: 'stopTrigger', pts: null },
+                    { label: 'Limit',   val: pendingOrder.entry,       color: '#7eb5f7', key: 'entry', pts: null },
+                  ] : [
+                    {
+                      label: pendingOrder.orderType === 'limit' ? 'Limit'
+                           : pendingOrder.orderType === 'stop'  ? 'Stop'
+                           : 'Entry',
+                      val: pendingOrder.entry, color: '#7eb5f7', key: 'entry', pts: null,
+                    },
+                  ]),
+                  { label: 'TP', val: pendingOrder.tp, color: '#4ade80', key: 'tp',
+                    pts: +(pendingOrder.tp - pendingOrder.entry).toFixed(2) },
+                  { label: 'SL', val: pendingOrder.sl, color: '#f87171', key: 'sl',
+                    pts: +(pendingOrder.sl - pendingOrder.entry).toFixed(2) },
+                ].map((row, i) => (
+                  <div key={row.label} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '5px 0',
+                    borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', color: '#4a5580', fontWeight: 600, minWidth: '40px' }}>{row.label}</span>
+                      {row.pts !== null && (
+                        <span style={{ fontSize: '9px', color: row.pts > 0 ? '#4ade8099' : '#f8717199', fontFamily: 'monospace' }}>
+                          {row.pts > 0 ? '+' : ''}{row.pts}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number" step="0.25" value={row.val}
+                      onChange={e => handleUpdateOrder({ [row.key]: +e.target.value })}
+                      style={{
+                        width: '84px', background: 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${row.color}44`,
+                        borderRadius: '4px', color: row.color,
+                        padding: '4px 8px', fontSize: '13px', fontWeight: 700,
+                        fontFamily: 'monospace', textAlign: 'right',
+                      }}
+                    />
+                  </div>
+                ))}
 
-              {/* R:R + risk */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>R:R</span>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)', fontFamily: 'monospace' }}>
-                  {rr(pendingOrder.entry, pendingOrder.tp, pendingOrder.sl)}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Max Risk</span>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444', fontFamily: 'monospace' }}>
-                  {fmt$(Math.abs(pendingOrder.entry - pendingOrder.sl) * pointValue(symbol))}
-                </span>
-              </div>
-
-              {pendingOrder.orderType !== 'market' && (
-                <div style={{ fontSize: '10px', color: '#f59e0b', marginBottom: '8px', lineHeight: 1.5, background: 'rgba(245,158,11,0.08)', padding: '6px 8px', borderRadius: '5px' }}>
-                  {pendingOrder.orderType === 'limit'
-                    ? `Order waits until price reaches ${pendingOrder.entry.toFixed(2)}`
-                    : pendingOrder.orderType === 'stop'
-                    ? `Order triggers when price hits ${pendingOrder.entry.toFixed(2)}`
-                    : `Triggers at ${pendingOrder.stopTrigger?.toFixed(2)}, fills at ${pendingOrder.entry.toFixed(2)}`}
-                </div>
-              )}
-
-              {trailingEnabled && (
-                <div style={{ fontSize: '10px', color: '#f59e0b', marginBottom: '6px', background: 'rgba(245,158,11,0.08)', padding: '5px 8px', borderRadius: '5px' }}>
-                  Trailing stop: {trailPts} pts
-                </div>
-              )}
-
-              {orderValidError && (
-                <div style={{ fontSize: '11px', color: '#ef4444', marginBottom: '8px', background: 'rgba(239,68,68,0.1)', padding: '6px 8px', borderRadius: '5px', fontWeight: 600 }}>
-                  ⚠ {orderValidError}
-                </div>
-              )}
-
-              <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '8px', lineHeight: 1.5 }}>
-                Drag TP/SL lines on the chart to adjust
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={handleConfirm} style={{
-                  flex: 1, padding: '9px', border: 'none', borderRadius: '6px',
-                  background: pendingOrder.side === 'LONG' ? '#16a34a' : '#dc2626',
-                  color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'inherit',
+                {/* R:R bar */}
+                <div style={{
+                  marginTop: '8px', padding: '6px 10px', background: 'rgba(255,255,255,0.03)',
+                  borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}>
-                  {pendingOrder.orderType === 'market' ? 'Confirm' : 'Place Order'}
-                </button>
-                <button onClick={handleCancel} style={{
-                  padding: '9px 14px', border: '1px solid var(--border)', borderRadius: '6px',
-                  background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit',
-                }}>Cancel</button>
+                  <div>
+                    <div style={{ fontSize: '9px', color: '#4a5580', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '1px' }}>Risk:Reward</div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text)', fontFamily: 'monospace' }}>{rr(pendingOrder.entry, pendingOrder.tp, pendingOrder.sl)}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '9px', color: '#4a5580', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '1px' }}>Max Risk</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#f87171', fontFamily: 'monospace' }}>
+                      {fmt$(Math.abs(pendingOrder.entry - pendingOrder.sl) * pointValue(symbol))}
+                    </div>
+                  </div>
+                </div>
+
+                {pendingOrder.orderType !== 'market' && (
+                  <div style={{ marginTop: '6px', fontSize: '10px', color: '#c08030', lineHeight: 1.5, background: 'rgba(245,158,11,0.07)', padding: '5px 8px', borderRadius: '4px' }}>
+                    {pendingOrder.orderType === 'limit'
+                      ? `Waits until price reaches ${pendingOrder.entry.toFixed(2)}`
+                      : pendingOrder.orderType === 'stop'
+                      ? `Triggers when price hits ${pendingOrder.entry.toFixed(2)}`
+                      : `Triggers @ ${pendingOrder.stopTrigger?.toFixed(2)}, fills @ ${pendingOrder.entry.toFixed(2)}`}
+                  </div>
+                )}
+
+                {trailingEnabled && (
+                  <div style={{ marginTop: '4px', fontSize: '10px', color: '#c08030', background: 'rgba(245,158,11,0.07)', padding: '4px 8px', borderRadius: '4px' }}>
+                    Trailing stop: {trailPts} pts
+                  </div>
+                )}
+
+                {orderValidError && (
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#f87171', background: 'rgba(239,68,68,0.08)', padding: '5px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                    ⚠ {orderValidError}
+                  </div>
+                )}
+
+                <div style={{ marginTop: '4px', fontSize: '9px', color: '#3a4460', textAlign: 'center' }}>
+                  Drag Entry / TP / SL lines on chart to adjust
+                </div>
+
+                {/* Confirm / Cancel */}
+                <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                  <button onClick={handleConfirm} style={{
+                    flex: 1, padding: '10px', border: 'none', borderRadius: '5px',
+                    background: pendingOrder.side === 'LONG' ? '#166534' : '#7f1d1d',
+                    color: pendingOrder.side === 'LONG' ? '#4ade80' : '#f87171',
+                    cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'inherit',
+                    transition: 'filter .12s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.2)'}
+                    onMouseLeave={e => e.currentTarget.style.filter = ''}
+                  >
+                    {pendingOrder.orderType === 'market' ? '✓ Confirm Trade' : '✓ Place Order'}
+                  </button>
+                  <button onClick={handleCancel} style={{
+                    padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '5px',
+                    background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit',
+                  }}>✕</button>
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── Awaiting fill ───────────────────────────────────────────────── */}
+          {/* ── Awaiting fill (TV-style) ─────────────────────────────────────── */}
           {awaitingFill && !activeOrder && (
-            <div style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s infinite' }} />
-                <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: '#f59e0b' }}>
-                  Awaiting Fill
-                </span>
-                <span style={{ marginLeft: 'auto', fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontWeight: 700 }}>
+            <div style={{
+              margin: '10px',
+              border: '1px solid rgba(245,158,11,0.25)',
+              borderLeft: '3px solid #f59e0b',
+              borderRadius: '6px',
+              background: 'rgba(245,158,11,0.04)',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '7px 12px', background: 'rgba(245,158,11,0.10)',
+                display: 'flex', alignItems: 'center', gap: '7px',
+              }}>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#f59e0b', flex: 1 }}>Awaiting Fill</span>
+                <span style={{ fontSize: '10px', color: '#6b7a9e', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '3px' }}>
                   {ORDER_TYPES.find(o => o.id === awaitingFill.orderType)?.label.toUpperCase()}
                 </span>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Side</span>
-                  <span style={{ fontWeight: 700, color: awaitingFill.side === 'LONG' ? '#22c55e' : '#ef4444' }}>{awaitingFill.side}</span>
+                  <span style={{ color: '#4a5580' }}>Side</span>
+                  <span style={{ fontWeight: 700, color: awaitingFill.side === 'LONG' ? '#4ade80' : '#f87171' }}>{awaitingFill.side}</span>
                 </div>
                 {awaitingFill.orderType === 'stop_limit' && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Trigger</span>
+                    <span style={{ color: '#4a5580' }}>Trigger</span>
                     <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#f59e0b' }}>{awaitingFill.stopTrigger?.toFixed(2)}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{awaitingFill.orderType === 'stop_limit' ? 'Limit' : awaitingFill.orderType === 'limit' ? 'Limit' : 'Stop'}</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#4f8ef7' }}>{awaitingFill.entry.toFixed(2)}</span>
+                  <span style={{ color: '#4a5580' }}>
+                    {awaitingFill.orderType === 'stop_limit' ? 'Limit' : awaitingFill.orderType === 'limit' ? 'Limit' : 'Stop'}
+                  </span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#7eb5f7' }}>{awaitingFill.entry.toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>TP / SL</span>
-                  <span style={{ fontFamily: 'monospace', color: 'var(--muted)', fontSize: '10px' }}>
-                    <span style={{ color: '#22c55e' }}>{awaitingFill.tp.toFixed(2)}</span>
-                    {' / '}
-                    <span style={{ color: '#ef4444' }}>{awaitingFill.sl.toFixed(2)}</span>
-                  </span>
+                  <span style={{ color: '#4a5580' }}>TP</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#4ade80' }}>{awaitingFill.tp.toFixed(2)}</span>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#4a5580' }}>SL</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#f87171' }}>{awaitingFill.sl.toFixed(2)}</span>
+                </div>
+                <button onClick={() => setAwaitingFill(null)} style={{
+                  marginTop: '4px', width: '100%', padding: '7px', border: '1px solid rgba(245,158,11,0.2)',
+                  borderRadius: '4px', background: 'transparent', color: '#f59e0b',
+                  cursor: 'pointer', fontSize: '11px', fontFamily: 'inherit', fontWeight: 600,
+                }}>
+                  Cancel Order
+                </button>
               </div>
-              <button onClick={() => setAwaitingFill(null)} style={{
-                marginTop: '10px', width: '100%', padding: '7px', border: '1px solid var(--border)',
-                borderRadius: '6px', background: 'transparent', color: 'var(--muted)',
-                cursor: 'pointer', fontSize: '11px', fontFamily: 'inherit',
-              }}>
-                Cancel Order
-              </button>
             </div>
           )}
 
-          {/* ── Active order ─────────────────────────────────────────────────── */}
-          {activeOrder && (
-            <div style={{ padding: '14px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px', fontWeight: 600 }}>Active Trade</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: activeOrder.side === 'LONG' ? '#22c55e' : '#ef4444', fontWeight: 700, fontSize: '13px' }}>
-                {activeOrder.side === 'LONG' ? '▲' : '▼'} {activeOrder.side}
-                <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 400 }}>@ {activeOrder.entry.toFixed(2)}</span>
-              </div>
-              {[{ label: 'TP', val: activeOrder.tp, color: '#22c55e' }, { label: 'SL', val: activeOrder.sl, color: '#ef4444' }].map(r => (
-                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                  <span style={{ color: 'var(--muted)' }}>{r.label}</span>
-                  <span style={{ color: r.color, fontWeight: 700, fontFamily: 'monospace' }}>{r.val.toFixed(2)}</span>
-                </div>
-              ))}
-              {livePrice && (
-                <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--muted)' }}>
-                  Unrealized:{' '}
-                  <span style={{ fontWeight: 700, fontFamily: 'monospace', color: (activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pointValue(symbol) >= 0 ? '#22c55e' : '#ef4444' }}>
-                    {fmt$((activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pointValue(symbol), true)}
-                  </span>
-                  {' '}
-                  <span style={{ color: 'var(--muted)', fontSize: '10px' }}>@ {livePrice.toFixed(2)}</span>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
-                <button onClick={handleCloseTrade} style={{
-                  flex: 1, padding: '8px', border: 'none',
-                  borderRadius: '6px', background: activeOrder.side === 'LONG' ? '#dc2626' : '#16a34a',
-                  color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit',
+          {/* ── Active trade (TV-style) ──────────────────────────────────────── */}
+          {activeOrder && (() => {
+            const pv  = pointValue(symbol)
+            const uPnL = livePrice != null
+              ? (activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pv
+              : null
+            const isProfit = uPnL != null && uPnL >= 0
+            const sideColor = activeOrder.side === 'LONG' ? '#4ade80' : '#f87171'
+            const tpPts = +(activeOrder.tp - activeOrder.entry).toFixed(2)
+            const slPts = +(activeOrder.sl - activeOrder.entry).toFixed(2)
+            return (
+              <div style={{
+                margin: '10px',
+                border: `1px solid ${activeOrder.side === 'LONG' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
+                borderLeft: `3px solid ${sideColor}`,
+                borderRadius: '6px',
+                background: activeOrder.side === 'LONG' ? 'rgba(22,163,74,0.04)' : 'rgba(220,38,38,0.04)',
+                overflow: 'hidden',
+              }}>
+                {/* Header: side + entry + unrealized */}
+                <div style={{
+                  padding: '8px 12px',
+                  background: activeOrder.side === 'LONG' ? 'rgba(22,163,74,0.10)' : 'rgba(220,38,38,0.10)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}>
-                  Exit @ Market
-                </button>
-                <button onClick={() => setActiveOrder(null)} style={{
-                  padding: '8px 10px', border: '1px solid var(--border)',
-                  borderRadius: '6px', background: 'transparent', color: 'var(--muted)',
-                  cursor: 'pointer', fontSize: '11px', fontFamily: 'inherit',
-                  title: 'Remove order without recording P&L',
-                }}>
-                  Cancel
-                </button>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: sideColor }}>
+                      {activeOrder.side === 'LONG' ? '▲ LONG' : '▼ SHORT'}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#6b7a9e', marginTop: '1px', fontFamily: 'monospace' }}>
+                      Entry {activeOrder.entry.toFixed(2)}
+                    </div>
+                  </div>
+                  {uPnL != null && (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '9px', color: '#4a5580', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'monospace', color: isProfit ? '#4ade80' : '#f87171' }}>
+                        {fmt$(uPnL, true)}
+                      </div>
+                      {livePrice && (
+                        <div style={{ fontSize: '9px', color: '#4a5580', fontFamily: 'monospace' }}>@ {livePrice.toFixed(2)}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* TP / SL rows with editable inputs */}
+                <div style={{ padding: '8px 12px' }}>
+                  {[
+                    { label: 'TP', val: activeOrder.tp, color: '#4ade80', pts: tpPts, key: 'tp' },
+                    { label: 'SL', val: activeOrder.sl, color: '#f87171', pts: slPts, key: 'sl' },
+                  ].map((r, i) => (
+                    <div key={r.label} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '5px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#4a5580', fontWeight: 600, minWidth: '18px' }}>{r.label}</span>
+                        <span style={{ fontSize: '9px', color: `${r.color}99`, fontFamily: 'monospace' }}>
+                          {r.pts > 0 ? '+' : ''}{r.pts}
+                        </span>
+                      </div>
+                      <input
+                        type="number" step="0.25" value={r.val}
+                        onChange={e => handleUpdateActiveOrder({ [r.key]: +e.target.value })}
+                        style={{
+                          width: '84px', background: 'rgba(255,255,255,0.04)',
+                          border: `1px solid ${r.color}44`,
+                          borderRadius: '4px', color: r.color,
+                          padding: '4px 8px', fontSize: '13px', fontWeight: 700,
+                          fontFamily: 'monospace', textAlign: 'right',
+                        }}
+                      />
+                    </div>
+                  ))}
+
+                  <div style={{ fontSize: '9px', color: '#3a4460', textAlign: 'center', marginTop: '4px', marginBottom: '8px' }}>
+                    Drag TP / SL lines on chart to adjust
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button onClick={handleCloseTrade} style={{
+                      flex: 1, padding: '10px', border: 'none',
+                      borderRadius: '5px',
+                      background: activeOrder.side === 'LONG' ? '#7f1d1d' : '#14532d',
+                      color: activeOrder.side === 'LONG' ? '#f87171' : '#4ade80',
+                      cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'inherit',
+                      transition: 'filter .12s',
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.2)'}
+                      onMouseLeave={e => e.currentTarget.style.filter = ''}
+                    >
+                      ✕ Close @ Market
+                    </button>
+                    <button onClick={() => setActiveOrder(null)} style={{
+                      padding: '10px 10px', border: '1px solid var(--border)',
+                      borderRadius: '5px', background: 'transparent', color: '#4a5580',
+                      cursor: 'pointer', fontSize: '11px', fontFamily: 'inherit',
+                      title: 'Discard without logging P&L',
+                    }}>
+                      Discard
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* ── Trade result ─────────────────────────────────────────────────── */}
           {orderResult && (

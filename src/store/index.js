@@ -392,8 +392,9 @@ const useStore = create(
 
       addPaperTrade: (trade) => {
         const date = (trade.date ?? new Date().toISOString()).split('T')[0]
-        const withId = { ...trade, id: trade.id ?? crypto.randomUUID() }
         set(s => {
+          // Stamp accountId so the dashboard can filter per named account
+          const withId = { ...trade, id: trade.id ?? crypto.randomUUID(), accountId: s.activeAccountId }
           // Update the named account P&L for the active account
           const activeAcc = s.namedAccounts.find(a => a.id === s.activeAccountId)
           const updatedNamed = activeAcc ? s.namedAccounts.map(a => {

@@ -406,6 +406,34 @@ function buildKillZones(candles) {
 }
 
 // ── Chart theme ───────────────────────────────────────────────────────────────
+// Convert any LWC time value (Unix seconds OR BusinessDay {year,month,day}) to ET string.
+// Returns a non-empty string in all cases — LWC hides tick labels if the formatter returns ''.
+function toET(ts, opts) {
+  try {
+    const ms = typeof ts === 'number'
+      ? ts * 1000
+      : (ts?.year != null ? Date.UTC(ts.year, ts.month - 1, ts.day) : new Date(ts).valueOf())
+    const s = new Date(ms).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts })
+    if (s && s !== 'Invalid Date') return s
+  } catch { /* fall through */ }
+  // Safe UTC fallback — always produces a non-empty label
+  try {
+    const ms = typeof ts === 'number' ? ts * 1000 : Date.now()
+    const d = new Date(ms)
+    if (opts.hour !== undefined) {
+      const h = d.getUTCHours(), m = d.getUTCMinutes()
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
+    }
+    if (opts.month !== undefined && opts.day !== undefined) {
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+      return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`
+    }
+    if (opts.month !== undefined) return `${d.getUTCFullYear()}`
+    return `${d.getUTCFullYear()}`
+  } catch { return '–' }
+}
+
 const CHART_OPTIONS = {
   layout: {
     background: { color: '#0c0e16' },
@@ -423,10 +451,19 @@ const CHART_OPTIONS = {
     horzLine: { color: '#4f8ef7', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1a2340', labelVisible: true },
   },
   timeScale: {
+    visible: true,
     borderColor: '#1c1f2e',
     timeVisible: true,
     secondsVisible: false,
     borderVisible: true,
+    // Set here (not via applyOptions) so LWC uses it before the first render
+    tickMarkFormatter: (ts, tickMarkType) => {
+      // TickMarkType: 0=Year 1=Month 2=DayOfMonth 3=Time 4=TimeWithSeconds
+      if (tickMarkType === 0) return toET(ts, { year: 'numeric' })
+      if (tickMarkType === 1) return toET(ts, { month: 'short', year: 'numeric' })
+      if (tickMarkType === 2) return toET(ts, { month: 'short', day: 'numeric' })
+      return toET(ts, { hour: 'numeric', minute: '2-digit', hour12: true })
+    },
   },
   rightPriceScale: { borderColor: '#1c1f2e', borderVisible: true },
   handleScale: { axisPressedMouseMove: true },
@@ -509,37 +546,13 @@ export default function ChartContainer({
     })
     chartRef.current = chart
 
-    // ── ET 12-hour time display ───────────────────────────────────────────────
-    // All timestamps are UTC; display converted to America/New_York (handles DST)
-    const toET = (ts, opts) => {
-      try {
-        let t = typeof ts === 'number' ? ts * 1000 : (ts.year ? Date.UTC(ts.year, ts.month - 1, ts.day) : new Date(ts).valueOf());
-        const result = new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts });
-        return result || new Date(t).toUTCString();
-      } catch (e) {
-        try {
-          const t2 = typeof ts === 'number' ? ts * 1000 : Date.now();
-          return new Date(t2).toISOString().slice(0, 16).replace('T', ' ');
-        } catch { return '' }
-      }
-    };
-
+    // ── ET 12-hour crosshair tooltip (uses the module-level toET helper) ─────
     chart.applyOptions({
       localization: {
         timeFormatter: (ts) => toET(ts, {
           month: 'short', day: 'numeric',
           hour: 'numeric', minute: '2-digit', hour12: true,
         }),
-      },
-    })
-
-    chart.timeScale().applyOptions({
-      tickMarkFormatter: (ts, tickMarkType) => {
-        // TickMarkType: 0=Year 1=Month 2=DayOfMonth 3=Time 4=TimeWithSeconds
-        if (tickMarkType === 0) return toET(ts, { year: 'numeric' })
-        if (tickMarkType === 1) return toET(ts, { month: 'short', year: 'numeric' })
-        if (tickMarkType === 2) return toET(ts, { month: 'short', day: 'numeric' })
-        return toET(ts, { hour: 'numeric', minute: '2-digit', hour12: true }) // short time
       },
     })
 
@@ -1017,7 +1030,7 @@ export default function ChartContainer({
       drawingPrimRef.current?.setSelectedId(null)
     }
 
-    // ── 2. TP/SL drag ────────────────────────────────────────────────────────
+    // ── 2. TP/SL/Entry drag ──────────────────────────────────────────────────
     const order      = pendingOrderRef.current || activeOrderRef.current || awaitingFillRef.current
     const isPending  = !!pendingOrderRef.current
     const isAwaiting = !pendingOrderRef.current && !activeOrderRef.current && !!awaitingFillRef.current
@@ -1026,12 +1039,15 @@ export default function ChartContainer({
     const y = chartY(e.clientY)
     if (y == null) return
 
-    const tpCoord = cs.priceToCoordinate(order.tp)
-    const slCoord = cs.priceToCoordinate(order.sl)
+    const tpCoord    = cs.priceToCoordinate(order.tp)
+    const slCoord    = cs.priceToCoordinate(order.sl)
+    const entryCoord = cs.priceToCoordinate(order.entry)
 
     let target = null
-    if (tpCoord != null && Math.abs(y - tpCoord) <= DRAG_THRESHOLD) target = 'tp'
-    else if (slCoord != null && Math.abs(y - slCoord) <= DRAG_THRESHOLD) target = 'sl'
+    if (tpCoord    != null && Math.abs(y - tpCoord)    <= DRAG_THRESHOLD) target = 'tp'
+    else if (slCoord != null && Math.abs(y - slCoord)  <= DRAG_THRESHOLD) target = 'sl'
+    // Entry drag only for pending/awaiting-fill — not active trades (entry is fixed once filled)
+    else if (!isAwaiting && isPending && entryCoord != null && Math.abs(y - entryCoord) <= DRAG_THRESHOLD) target = 'entry'
     if (!target) return
 
     draggingRef.current = target
@@ -1047,17 +1063,22 @@ export default function ChartContainer({
       const cb = isPending  ? onUpdateOrderRef.current
                : isAwaiting ? onUpdateAwaitingFillRef.current
                : onUpdateActiveOrderRef.current
-      if (draggingRef.current === 'tp') cb?.({ tp: p })
-      if (draggingRef.current === 'sl') cb?.({ sl: p })
+      if (draggingRef.current === 'tp')    cb?.({ tp: p })
+      if (draggingRef.current === 'sl')    cb?.({ sl: p })
+      if (draggingRef.current === 'entry') cb?.({ entry: p })
 
       const cur = isPending  ? pendingOrderRef.current
                 : isAwaiting ? awaitingFillRef.current
                 : activeOrderRef.current
       if (cur) {
-        const pts = Math.abs(p - cur.entry)
+        const ref = draggingRef.current === 'entry' ? cur.sl : cur.entry
+        const pts = Math.abs(p - ref)
         const pv  = pointValue ?? 50
+        const label = draggingRef.current === 'tp' ? 'TP'
+                    : draggingRef.current === 'sl' ? 'SL'
+                    : 'Entry'
         setDragDisplay({
-          label:   draggingRef.current === 'tp' ? 'TP' : 'SL',
+          label,
           pts:     +pts.toFixed(2),
           dollars: Math.round(pts * pv),
           y:       chartY(ev.clientY) ?? 0,
@@ -1131,18 +1152,20 @@ export default function ChartContainer({
       setHoverDrawing(false)
     }
 
-    // ── TP/SL hover detection ─────────────────────────────────────────────────
+    // ── TP/SL/Entry hover detection ───────────────────────────────────────────
     const order = pendingOrderRef.current || activeOrderRef.current
     if (!order) { setHoverLine(null); return }
 
     const y = chartY(e.clientY)
     if (y == null) { setHoverLine(null); return }
 
-    const tpCoord = cs.priceToCoordinate(order.tp)
-    const slCoord = cs.priceToCoordinate(order.sl)
+    const tpCoord    = cs.priceToCoordinate(order.tp)
+    const slCoord    = cs.priceToCoordinate(order.sl)
+    const entryCoord = cs.priceToCoordinate(order.entry)
 
-    if (tpCoord != null && Math.abs(y - tpCoord) <= DRAG_THRESHOLD) setHoverLine('tp')
-    else if (slCoord != null && Math.abs(y - slCoord) <= DRAG_THRESHOLD) setHoverLine('sl')
+    if (tpCoord    != null && Math.abs(y - tpCoord)    <= DRAG_THRESHOLD) setHoverLine('tp')
+    else if (slCoord != null && Math.abs(y - slCoord)  <= DRAG_THRESHOLD) setHoverLine('sl')
+    else if (pendingOrderRef.current && entryCoord != null && Math.abs(y - entryCoord) <= DRAG_THRESHOLD) setHoverLine('entry')
     else setHoverLine(null)
   }, [])
 
@@ -1167,6 +1190,15 @@ export default function ChartContainer({
       // Ignore stale data errors
     }
   }, [visibleCandles])
+
+  // ── Auto-fit when ticker or timeframe changes (candles dataset replaced) ──────
+  // Watches the raw `candles` prop (not visibleCandles) so replay stepping does
+  // NOT trigger a fit — only a full dataset replacement (symbol/TF switch) does.
+  useEffect(() => {
+    if (!candles.length) return
+    chartRef.current?.timeScale().fitContent()
+    rsiChartRef.current?.timeScale().fitContent()
+  }, [candles])
 
   // ── SMC overlays ─────────────────────────────────────────────────────────────
   // FVG and OB use canvas box primitives (start at formation candle, extend right).
@@ -1385,7 +1417,7 @@ export default function ChartContainer({
           fontSize: '10px', color: 'var(--muted)', pointerEvents: 'none',
           background: 'rgba(8,9,13,0.8)', padding: '3px 8px', borderRadius: '4px',
         }}>
-          Drag TP/SL lines to adjust
+          Drag Entry / TP / SL lines to adjust
         </div>
       )}
 
@@ -1396,8 +1428,8 @@ export default function ChartContainer({
           top: Math.max(4, dragDisplay.y - 28),
           left: '50%',
           transform: 'translateX(-50%)',
-          background: dragDisplay.label === 'TP' ? 'rgba(22,163,74,0.9)' : 'rgba(220,38,38,0.9)',
-          border: `1px solid ${dragDisplay.label === 'TP' ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.6)'}`,
+          background: dragDisplay.label === 'TP' ? 'rgba(22,163,74,0.9)' : dragDisplay.label === 'Entry' ? 'rgba(26,35,64,0.95)' : 'rgba(220,38,38,0.9)',
+          border: `1px solid ${dragDisplay.label === 'TP' ? 'rgba(34,197,94,0.6)' : dragDisplay.label === 'Entry' ? 'rgba(79,142,247,0.6)' : 'rgba(239,68,68,0.6)'}`,
           color: '#fff',
           padding: '4px 10px',
           borderRadius: '5px',

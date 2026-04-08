@@ -633,10 +633,18 @@ export default function DashboardPage() {
   const selectedAcc  = namedAccounts.find(a => a.id === activeAccId) ?? namedAccounts[0]
   const mode         = selectedAcc?.type ?? 'prop'
 
-  const trades = useMemo(
-    () => allTrades.filter(t => t.accountType === mode),
-    [allTrades, mode]
-  )
+  const trades = useMemo(() => {
+    // Default accounts: show trades that match type but have no accountId (legacy)
+    // OR are explicitly tagged to this default account
+    if (activeAccId === 'default-prop') {
+      return allTrades.filter(t => t.accountType === 'prop' && (!t.accountId || t.accountId === 'default-prop'))
+    }
+    if (activeAccId === 'default-paper') {
+      return allTrades.filter(t => t.accountType === 'paper' && (!t.accountId || t.accountId === 'default-paper'))
+    }
+    // Named accounts: only show trades explicitly tagged to this account
+    return allTrades.filter(t => t.accountId === activeAccId)
+  }, [allTrades, mode, activeAccId])
 
   const dailyPnL = useMemo(() => {
     // For named accounts (non-default), use their own dailyPnL

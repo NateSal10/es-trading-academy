@@ -102,8 +102,15 @@ function mergeCandles(existing, fresh) {
   return [...base, ...fresh]
 }
 
+// Futures trade nearly 24/5 — include pre/post session data.
+// Stocks have thin extended-hours volume that causes price spikes.
+function isFuturesSymbol(symbol) {
+  return symbol.endsWith('=F') || symbol.endsWith('.CME') || symbol.endsWith('.CBT') || symbol.endsWith('.NYB')
+}
+
 function buildUrl(symbol, interval, range) {
-  return `/api/yahoo/v8/finance/chart/${symbol}?interval=${interval}&range=${range}&includePrePost=true`
+  const prePost = isFuturesSymbol(symbol) ? '&includePrePost=true' : ''
+  return `/api/yahoo/v8/finance/chart/${symbol}?interval=${interval}&range=${range}${prePost}`
 }
 
 async function fetchCandles(symbol, interval, range, aggregate) {
