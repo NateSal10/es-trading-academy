@@ -1,5 +1,6 @@
 import useStore from '../../store'
 
+
 const SMC_LAYERS = [
   { key: 'fvg', label: 'FVG Zones',    color: '#22c55e' },
   { key: 'ob',  label: 'Order Blocks', color: '#fb923c' },
@@ -50,6 +51,8 @@ export default function IndicatorPanel() {
   const setSession   = useStore(s => s.setSession)
   const brStrategy   = useStore(s => s.brStrategy)
   const setBrStrategy = useStore(s => s.setBrStrategy)
+  const indicators   = useStore(s => s.indicators)
+  const setIndicator = useStore(s => s.setIndicator)
 
   return (
     <div className="side-panel">
@@ -97,21 +100,19 @@ export default function IndicatorPanel() {
         ))}
       </div>
 
-      {/* Kill Zones */}
+
+      {/* Indicators */}
       <div className="panel-section">
-        <div className="panel-title">ICT Kill Zones</div>
+        <div className="panel-title">Indicators</div>
         <div className="indicator-row">
           <span className="indicator-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'linear-gradient(135deg,#38bdf8,#22c55e,#f59e0b,#ef4444)', display: 'inline-block', flexShrink: 0 }} />
-            Kill Zones
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#7b68ee', display: 'inline-block', flexShrink: 0 }} />
+            RSI (14)
           </span>
-          <Toggle checked={sessions.killZones} onChange={e => setSession('killZones', e.target.checked)} color="#38bdf8" />
+          <Toggle checked={indicators.rsi} onChange={e => setIndicator('rsi', e.target.checked)} color="#7b68ee" />
         </div>
-        <div style={{ paddingLeft: '16px', fontSize: '9px', color: 'var(--muted)', lineHeight: 1.6, marginTop: '-4px' }}>
-          <div style={{ color: '#38bdf8', fontWeight: 600 }}>London Open 7–10 AM UTC</div>
-          <div style={{ color: '#22c55e', fontWeight: 600 }}>NY Open 14:30–16 UTC</div>
-          <div style={{ color: '#f59e0b', fontWeight: 600 }}>NY Lunch 17–18 UTC</div>
-          <div style={{ color: '#ef4444', fontWeight: 600 }}>NY Close 20–21 UTC</div>
+        <div style={{ paddingLeft: '16px', fontSize: '9px', color: 'var(--muted)', lineHeight: 1.4, marginTop: '-4px' }}>
+          Wilder's smoothed · OB 70 · OS 30
         </div>
       </div>
 

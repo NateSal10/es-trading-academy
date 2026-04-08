@@ -10,6 +10,9 @@ const SYMBOLS    = ['ES=F', 'MES=F', 'NQ=F']
 const ES_POINT   = 50
 const MES_POINT  = 5
 
+// Common stock/ETF suggestions shown as chips
+const POPULAR_TICKERS = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'SPY', 'QQQ', 'AMZN', 'META']
+
 const ORDER_TYPES = [
   { id: 'market',     label: 'Market',     desc: 'Fill immediately at current price' },
   { id: 'limit',      label: 'Limit',      desc: 'Long: fill at or below entry · Short: fill at or above entry' },
@@ -18,7 +21,10 @@ const ORDER_TYPES = [
 ]
 
 function pointValue(symbol) {
-  return symbol === 'MES=F' ? MES_POINT : ES_POINT
+  if (symbol === 'MES=F') return MES_POINT
+  if (symbol === 'ES=F')  return ES_POINT
+  if (symbol === 'NQ=F')  return 20
+  return 1  // stocks/ETFs: $1 per point (100-share lot equivalent)
 }
 
 function fmt$(n, sign = false) {
@@ -44,6 +50,8 @@ function rr(entry, tp, sl) {
 export default function PracticePage() {
   const [symbol,      setSymbol]      = useState('ES=F')
   const [timeframe,   setTimeframe]   = useState('5m')
+  const [tickerQuery, setTickerQuery] = useState('')
+  const [showTickers, setShowTickers] = useState(false)
   const [replayMode,  setReplayMode]  = useState(false)
   const [replayIndex, setReplayIndex] = useState(0)
   const [playing,     setPlaying]     = useState(false)
@@ -417,14 +425,102 @@ export default function PracticePage() {
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="chart-toolbar">
-        <select
-          className="tool-btn"
-          style={{ fontWeight: 700, paddingLeft: '8px', paddingRight: '8px' }}
-          value={symbol}
-          onChange={e => { setSymbol(e.target.value); setOrderMode(null); setPendingOrder(null) }}
-        >
-          {SYMBOLS.map(s => <option key={s} value={s}>{s.replace('=F', '')}</option>)}
-        </select>
+        {/* Symbol selector + search */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <select
+            className="tool-btn"
+            style={{ fontWeight: 700, paddingLeft: '8px', paddingRight: '8px' }}
+            value={SYMBOLS.includes(symbol) ? symbol : ''}
+            onChange={e => { if (e.target.value) { setSymbol(e.target.value); setOrderMode(null); setPendingOrder(null) } }}
+          >
+            {!SYMBOLS.includes(symbol) && (
+              <option value="">{symbol}</option>
+            )}
+            {SYMBOLS.map(s => <option key={s} value={s}>{s.replace('=F', '')}</option>)}
+          </select>
+
+          {/* Ticker search input */}
+          <div style={{ position: 'relative' }}>
+            <input
+              className="tool-btn"
+              style={{
+                width: 76, fontWeight: 700, fontFamily: 'inherit',
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+                background: showTickers ? 'var(--bg2)' : undefined,
+              }}
+              placeholder="Search…"
+              value={tickerQuery}
+              onChange={e => { setTickerQuery(e.target.value.toUpperCase()); setShowTickers(true) }}
+              onFocus={() => setShowTickers(true)}
+              onBlur={() => setTimeout(() => setShowTickers(false), 150)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && tickerQuery.trim()) {
+                  setSymbol(tickerQuery.trim())
+                  setOrderMode(null)
+                  setPendingOrder(null)
+                  setTickerQuery('')
+                  setShowTickers(false)
+                }
+                if (e.key === 'Escape') { setTickerQuery(''); setShowTickers(false) }
+              }}
+            />
+            {/* Suggestions dropdown */}
+            {showTickers && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, zIndex: 100,
+                background: '#0e1220', border: '1px solid #2a3a5a',
+                borderRadius: 6, minWidth: 140, marginTop: 2,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                overflow: 'hidden',
+              }}>
+                {(tickerQuery
+                  ? POPULAR_TICKERS.filter(t => t.startsWith(tickerQuery))
+                  : POPULAR_TICKERS
+                ).map(t => (
+                  <button
+                    key={t}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '6px 12px', background: 'none', border: 'none',
+                      color: symbol === t ? '#4f8ef7' : '#c0c8e0',
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      fontFamily: 'Inter, monospace, sans-serif',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#1a2340'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onMouseDown={() => {
+                      setSymbol(t)
+                      setOrderMode(null)
+                      setPendingOrder(null)
+                      setTickerQuery('')
+                      setShowTickers(false)
+                    }}
+                  >{t}</button>
+                ))}
+                {tickerQuery && !POPULAR_TICKERS.includes(tickerQuery) && (
+                  <button
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '6px 12px', background: 'none', border: 'none',
+                      color: '#4f8ef7', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      fontFamily: 'Inter, monospace, sans-serif',
+                      borderTop: '1px solid #1a2340',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#1a2340'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    onMouseDown={() => {
+                      setSymbol(tickerQuery.trim())
+                      setOrderMode(null)
+                      setPendingOrder(null)
+                      setTickerQuery('')
+                      setShowTickers(false)
+                    }}
+                  >+ Add "{tickerQuery}"</button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="toolbar-sep" />
 

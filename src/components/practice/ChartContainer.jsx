@@ -4,10 +4,34 @@ import {
   CrosshairMode,
   LineStyle,
   CandlestickSeries,
+  LineSeries,
 } from 'lightweight-charts'
 import useStore from '../../store'
 import { DrawingLayerPrimitive } from './drawingPrimitives'
 import { detectFVGs, detectOBs, detectLiquidity } from '../../engine/smcDetectors'
+
+// ── RSI calculation (Wilder's smoothed method) ────────────────────────────────
+function calculateRSI(candles, period = 14) {
+  if (candles.length < period + 1) return []
+  const results = []
+  let avgGain = 0, avgLoss = 0
+  // Seed with first `period` changes
+  for (let i = 1; i <= period; i++) {
+    const d = candles[i].close - candles[i - 1].close
+    if (d > 0) avgGain += d
+    else avgLoss += Math.abs(d)
+  }
+  avgGain /= period
+  avgLoss /= period
+  results.push({ time: candles[period].time, value: avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss) })
+  for (let i = period + 1; i < candles.length; i++) {
+    const d = candles[i].close - candles[i - 1].close
+    avgGain = (avgGain * (period - 1) + Math.max(0, d))  / period
+    avgLoss = (avgLoss * (period - 1) + Math.max(0, -d)) / period
+    results.push({ time: candles[i].time, value: avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss) })
+  }
+  return results
+}
 
 // Snap clicked price to the nearest OHLC value of the nearest candle (magnet mode)
 function snapToOHLC(candles, clickedTime, clickedPrice) {
@@ -126,7 +150,11 @@ class BoxZoneRenderer {
         // X: start at formation candle; extend to right edge of chart
         const rawStartX = ts.timeToCoordinate(z.startTime)
         const startX = rawStartX != null ? Math.max(0, rawStartX) : 0
-        const endX   = mediaSize.width + 4
+        let endX = mediaSize.width + 4
+        if (z.endTime != null) {
+          const rawEndX = ts.timeToCoordinate(z.endTime)
+          if (rawEndX != null) endX = Math.min(endX, rawEndX)
+        }
 
         const y = Math.min(topY, botY)
         const h = Math.max(2, Math.abs(topY - botY))
@@ -239,6 +267,8 @@ function buildSessionZones(candles, sessions) {
         color:      def.color,
         labelColor: def.labelColor,
         label:      def.label,
+        high:       Math.max(...sc.map(c => c.high)),
+        low:        Math.min(...sc.map(c => c.low)),
       })
     })
   })
@@ -276,7 +306,7 @@ class VerticalBandRenderer {
   constructor(src) { this._src = src }
 
   draw(target) {
-    const { _chart: c, _zones: zones } = this._src
+    const { _series: s, _chart: c, _zones: zones } = this._src
     if (!c || !zones.length) return
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
@@ -291,15 +321,28 @@ class VerticalBandRenderer {
         const w = right - left
         if (w <= 0) return
 
+        // Clip to session high/low price range if available
+        let topY = 0
+        let botY = mediaSize.height
+        if (s && z.high != null && z.low != null) {
+          const computedTop = s.priceToCoordinate(z.high)
+          const computedBot = s.priceToCoordinate(z.low)
+          if (computedTop != null && computedBot != null) {
+            topY = Math.min(computedTop, computedBot)
+            botY = Math.max(computedTop, computedBot)
+          }
+        }
+        const bandH = botY - topY
+
         ctx.fillStyle = z.color
-        ctx.fillRect(left, 0, w, mediaSize.height)
+        ctx.fillRect(left, topY, w, bandH)
 
         // Large centered watermark label
         ctx.fillStyle = z.labelColor
         ctx.font = 'bold 42px Inter, sans-serif'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillText(z.label, left + w / 2, mediaSize.height * 0.62)
+        ctx.fillText(z.label, left + w / 2, topY + bandH * 0.5)
         ctx.textAlign = 'left'
         ctx.textBaseline = 'alphabetic'
       })
@@ -316,12 +359,13 @@ class VerticalBandPaneView {
 class VerticalBandPrimitive {
   constructor() {
     this._zones  = []
+    this._series = null
     this._chart  = null
     this._request = null
     this._views  = [new VerticalBandPaneView(this)]
   }
-  attached({ chart, requestUpdate }) { this._chart = chart; this._request = requestUpdate }
-  detached() { this._chart = null; this._request = null }
+  attached({ series, chart, requestUpdate }) { this._series = series; this._chart = chart; this._request = requestUpdate }
+  detached() { this._series = null; this._chart = null; this._request = null }
   updateZones(zones) { this._zones = zones; this._request?.() }
   paneViews()      { return this._views }
   updateAllViews() {}
@@ -365,7 +409,7 @@ function buildKillZones(candles) {
 const CHART_OPTIONS = {
   layout: {
     background: { color: '#0c0e16' },
-    textColor: '#5a6080',
+    textColor: '#8892b0',
     fontFamily: 'Inter, system-ui, sans-serif',
     fontSize: 11,
   },
@@ -411,12 +455,14 @@ export default function ChartContainer({
   onDrawingDone,        // () => void — called after a drawing is placed
 }) {
   const mainElRef   = useRef(null)
+  const rsiElRef    = useRef(null)
   const chartRef    = useRef(null)
+  const rsiChartRef  = useRef(null)
+  const rsiSeriesRef = useRef(null)
   const seriesRef   = useRef({})
   const fvgPrimRef        = useRef(null)
   const obPrimRef         = useRef(null)
   const sessionPrimRef    = useRef(null)
-  const killZonePrimRef   = useRef(null)
   const drawingPrimRef    = useRef(null)
   const brStrategyPrimRef = useRef(null)
   const drawStartRef      = useRef(null)   // { time, price } — first click of line/box
@@ -436,6 +482,7 @@ export default function ChartContainer({
   const [hoverDrawing, setHoverDrawing] = useState(false)  // true when hovering a drawing
   const [dragDisplay, setDragDisplay]   = useState(null)   // { pts, dollars, y } — shown while dragging
   const [selectedDrawingId, setSelectedDrawingId] = useState(null)
+  const [crosshairTime, setCrosshairTime] = useState(null) // { x, label } — TV-style time tooltip
   const selectedDrawingIdRef = useRef(null)
   const drawingsRef          = useRef([])
   const drawingDragRef       = useRef(null)
@@ -444,6 +491,7 @@ export default function ChartContainer({
 
   const smcLayers  = useStore(s => s.smcLayers)
   const sessions   = useStore(s => s.sessions)
+  const indicators = useStore(s => s.indicators)
 
   const visibleCandles = useMemo(
     () => (replayIndex > 0 ? candles.slice(0, replayIndex) : candles),
@@ -466,9 +514,13 @@ export default function ChartContainer({
     const toET = (ts, opts) => {
       try {
         let t = typeof ts === 'number' ? ts * 1000 : (ts.year ? Date.UTC(ts.year, ts.month - 1, ts.day) : new Date(ts).valueOf());
-        return new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts });
+        const result = new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts });
+        return result || new Date(t).toUTCString();
       } catch (e) {
-        return '';
+        try {
+          const t2 = typeof ts === 'number' ? ts * 1000 : Date.now();
+          return new Date(t2).toISOString().slice(0, 16).replace('T', ' ');
+        } catch { return '' }
       }
     };
 
@@ -501,24 +553,104 @@ export default function ChartContainer({
     fvgPrimRef.current      = new BoxZonePrimitive()
     obPrimRef.current       = new BoxZonePrimitive()
     sessionPrimRef.current  = new VerticalBandPrimitive()
-    killZonePrimRef.current = new VerticalBandPrimitive()
     brStrategyPrimRef.current = new BoxZonePrimitive()
     drawingPrimRef.current  = new DrawingLayerPrimitive()
     seriesRef.current.candles.attachPrimitive(fvgPrimRef.current)
     seriesRef.current.candles.attachPrimitive(obPrimRef.current)
     seriesRef.current.candles.attachPrimitive(sessionPrimRef.current)
-    seriesRef.current.candles.attachPrimitive(killZonePrimRef.current)
     seriesRef.current.candles.attachPrimitive(brStrategyPrimRef.current)
     seriesRef.current.candles.attachPrimitive(drawingPrimRef.current)
 
     const ro = new ResizeObserver(() => {
       if (mainElRef.current) chart.applyOptions({ width: mainElRef.current.clientWidth, height: mainElRef.current.clientHeight || 420 })
+      if (rsiElRef.current && rsiChartRef.current) rsiChartRef.current.applyOptions({ width: rsiElRef.current.clientWidth })
     })
     ro.observe(mainElRef.current)
+
+    // ── RSI sub-chart ────────────────────────────────────────────────────────
+    if (rsiElRef.current) {
+      const rsiChart = createChart(rsiElRef.current, {
+        layout: {
+          background: { color: '#080b12' },
+          textColor: '#8892b0',
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: 10,
+        },
+        grid: {
+          vertLines: { color: '#0e1220' },
+          horzLines: { color: '#0e1220' },
+        },
+        crosshair: {
+          mode: CrosshairMode.Normal,
+          vertLine: { color: '#4f8ef7', width: 1, style: LineStyle.Dashed, labelVisible: false },
+          horzLine: { color: '#4f8ef7', width: 1, style: LineStyle.Dashed, labelVisible: true, labelBackgroundColor: '#1a2340' },
+        },
+        timeScale: { visible: false, borderVisible: false },
+        rightPriceScale: {
+          borderColor: '#1c1f2e',
+          borderVisible: true,
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+          minimumWidth: 64,
+        },
+        width:  rsiElRef.current.clientWidth,
+        height: rsiElRef.current.clientHeight || 100,
+        handleScroll: true,
+        handleScale: true,
+      })
+      rsiChartRef.current = rsiChart
+
+      const rsiSeries = rsiChart.addSeries(LineSeries, {
+        color: '#7b68ee',
+        lineWidth: 1.5,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 3,
+      })
+      rsiSeriesRef.current = rsiSeries
+
+      // Reference lines at 70, 50, 30
+      rsiSeries.createPriceLine({ price: 70, color: 'rgba(239,68,68,0.5)',   lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,  title: '70' })
+      rsiSeries.createPriceLine({ price: 50, color: 'rgba(120,120,140,0.35)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' })
+      rsiSeries.createPriceLine({ price: 30, color: 'rgba(34,197,94,0.5)',    lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,  title: '30' })
+
+      // Bidirectional time scale sync (main ↔ RSI)
+      let syncingRange = false
+      chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (syncingRange || !range) return
+        syncingRange = true
+        rsiChart.timeScale().setVisibleLogicalRange(range)
+        syncingRange = false
+      })
+      rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (syncingRange || !range) return
+        syncingRange = true
+        chart.timeScale().setVisibleLogicalRange(range)
+        syncingRange = false
+      })
+
+      ro.observe(rsiElRef.current)
+    }
+
+    // Crosshair time tooltip (TradingView-style)
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.point || !param.time) {
+        setCrosshairTime(null)
+        return
+      }
+      const label = toET(param.time, {
+        month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', hour12: true,
+      })
+      setCrosshairTime({ x: param.point.x, label })
+    })
 
     return () => {
       ro.disconnect()
       chart.remove()
+      rsiChartRef.current?.remove()
+      rsiChartRef.current  = null
+      rsiSeriesRef.current = null
     }
   }, [])
 
@@ -1026,6 +1158,16 @@ export default function ChartContainer({
     seriesRef.current.candles.setData(visibleCandles)
   }, [visibleCandles])
 
+  // ── Feed RSI data ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!rsiSeriesRef.current || !visibleCandles.length) return
+    try {
+      rsiSeriesRef.current.setData(calculateRSI(visibleCandles))
+    } catch {
+      // Ignore stale data errors
+    }
+  }, [visibleCandles])
+
   // ── SMC overlays ─────────────────────────────────────────────────────────────
   // FVG and OB use canvas box primitives (start at formation candle, extend right).
   // Liquidity uses price lines (single price level, no start/end concept).
@@ -1075,7 +1217,6 @@ export default function ChartContainer({
 
     // Background bands via primitive
     sessionPrimRef.current?.updateZones(buildSessionZones(visibleCandles, sessions))
-    killZonePrimRef.current?.updateZones(sessions.killZones ? buildKillZones(visibleCandles) : [])
 
     // H/L price lines — remove previous first
     if (seriesRef.current._sessionHLLines) {
@@ -1100,14 +1241,14 @@ export default function ChartContainer({
     if (!drawingDragRef.current) drawingPrimRef.current?.updateDrawings(drawings)
   }, [drawings])
 
-  // ── 15-min B&R strategy box ───────────────────────────────────────────────────
-  // Shows the 8:00–8:15 AM ET range from the most recent NY session.
-  // Persists until the next NY session opens (9:30 AM ET next trading day).
+  // ── 15-min B&R strategy boxes ─────────────────────────────────────────────────
+  // Shows the 8:00–8:15 AM ET range for EVERY NY session visible in the data.
+  // Each box spans from 8:00 AM ET and ends at 9:30 AM ET (NY open) of that day.
   const brStrategy = useStore(s => s.brStrategy)
   useEffect(() => {
     if (!brStrategy) { brStrategyPrimRef.current?.updateZones([]); return }
 
-    // Use ALL candles (not just visible) so the box doesn't disappear when scrolling
+    // Use ALL candles (not just visible) so the boxes don't disappear when scrolling
     const allCandles = replayIndex > 0 ? candles.slice(0, replayIndex) : candles
     if (!allCandles.length) { brStrategyPrimRef.current?.updateZones([]); return }
 
@@ -1131,26 +1272,30 @@ export default function ChartContainer({
       ? allCandles[allCandles.length - 1].time
       : Math.floor(Date.now() / 1000)
 
-    let brBox = null
+    // Collect B&R boxes for ALL dates (not just the most recent)
+    const brBoxes = []
     for (const dateStr of etDates) {
       const [y, m, d] = dateStr.split('-').map(Number)
       const etOffsetSecs = getETOffset(y, m, d)
 
       const start800 = Math.floor(Date.UTC(y, m - 1, d, 8, 0, 0) / 1000) + etOffsetSecs
       const start815 = Math.floor(Date.UTC(y, m - 1, d, 8, 15, 0) / 1000) + etOffsetSecs
+      // Box ends at 11:00 AM ET
+      const end930   = Math.floor(Date.UTC(y, m - 1, d, 11, 0, 0) / 1000) + etOffsetSecs
 
-      // Skip this date if 8:15 AM ET hasn't passed yet — look at a previous day
+      // Skip this date if 8:15 AM ET hasn't passed yet
       if (nowSecs < start815) continue
 
-      // Find candles in the 8:00-8:15 AM ET window from ALL candles
+      // Find candles in the 8:00-8:15 AM ET window
       const windowCandles = allCandles.filter(c => c.time >= start800 && c.time < start815)
       if (windowCandles.length > 0) {
-        brBox = {
+        brBoxes.push({
           top: Math.max(...windowCandles.map(c => c.high)),
           bot: Math.min(...windowCandles.map(c => c.low)),
           startTime: start800,
-        }
-        break
+          endTime: end930,
+        })
+        continue  // check next date — no break
       }
 
       // Fallback for large timeframes: candle that contains 8:00 AM ET
@@ -1158,15 +1303,17 @@ export default function ChartContainer({
         .filter(c => c.time <= start800)
         .sort((a, b) => b.time - a.time)[0]
       if (containing && containing.time >= start800 - 86400) {
-        brBox = { top: containing.high, bot: containing.low, startTime: containing.time }
-        break
+        brBoxes.push({ top: containing.high, bot: containing.low, startTime: containing.time, endTime: end930 })
       }
     }
 
-    brStrategyPrimRef.current?.updateZones(brBox ? [{
-      type: 'bull', top: brBox.top, bot: brBox.bot,
-      startTime: brBox.startTime, label: 'B&R 8AM', _brStrategy: true,
-    }] : [])
+    brStrategyPrimRef.current?.updateZones(
+      brBoxes.map(b => ({
+        type: 'bull', top: b.top, bot: b.bot,
+        startTime: b.startTime, endTime: b.endTime,
+        label: 'B&R 8AM', _brStrategy: true,
+      }))
+    )
   }, [candles, replayIndex, brStrategy])
 
   const cursor = (drawingTool || orderMode) ? 'crosshair'
@@ -1182,6 +1329,40 @@ export default function ChartContainer({
       onMouseLeave={handleMouseLeave}
     >
       <div ref={mainElRef} style={{ flex: 1, minHeight: 0 }} />
+
+      {/* RSI sub-pane */}
+      {indicators?.rsi && (
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div style={{
+            position: 'absolute', top: 4, left: 8, zIndex: 5,
+            fontSize: '10px', fontWeight: 700, color: '#7b68ee',
+            pointerEvents: 'none', fontFamily: 'Inter, sans-serif',
+          }}>RSI(14)</div>
+          <div ref={rsiElRef} style={{ height: 100, width: '100%', borderTop: '1px solid #1a2030' }} />
+        </div>
+      )}
+
+      {/* TradingView-style crosshair time label on x-axis */}
+      {crosshairTime && (
+        <div style={{
+          position: 'absolute',
+          bottom: 2,
+          left: crosshairTime.x,
+          transform: 'translateX(-50%)',
+          background: '#1a2340',
+          border: '1px solid #2a3a5a',
+          color: '#b0bcdc',
+          fontSize: '10px',
+          fontFamily: 'Inter, monospace, sans-serif',
+          padding: '2px 7px',
+          borderRadius: '3px',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+          zIndex: 15,
+        }}>
+          {crosshairTime.label}
+        </div>
+      )}
 
       {/* Placement hint */}
       {orderMode && (

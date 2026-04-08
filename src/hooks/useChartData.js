@@ -5,7 +5,7 @@ const cache = new Map()
 
 // Map our UI timeframe labels → Yahoo Finance params
 export const TF_CONFIG = {
-  '1m':  { yInterval: '1m',  yRange: '1d',  simInterval: 60,    pollMs: 8000,  pollRange: '1d'  },
+  '1m':  { yInterval: '1m',  yRange: '5d',  simInterval: 60,    pollMs: 8000,  pollRange: '1d'  },
   '5m':  { yInterval: '5m',  yRange: '5d',  simInterval: 300,   pollMs: 15000, pollRange: '1d'  },
   '15m': { yInterval: '15m', yRange: '5d',  simInterval: 900,   pollMs: 30000, pollRange: '2d'  },
   '30m': { yInterval: '30m', yRange: '60d', simInterval: 1800,  pollMs: 60000, pollRange: '5d'  },
