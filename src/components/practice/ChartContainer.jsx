@@ -1153,7 +1153,7 @@ export default function ChartContainer({
     }
 
     // ── TP/SL/Entry hover detection ───────────────────────────────────────────
-    const order = pendingOrderRef.current || activeOrderRef.current
+    const order = pendingOrderRef.current || activeOrderRef.current || awaitingFillRef.current
     if (!order) { setHoverLine(null); return }
 
     const y = chartY(e.clientY)

@@ -85,6 +85,14 @@ export default function PracticePage() {
   const [dailyLimitAck,     setDailyLimitAck]     = useState(false)  // user acknowledged daily limit banner
   const [pendingGrade,      setPendingGrade]       = useState(null)   // grade for the result trade (A+/A/B/C)
 
+  // Local input state for active-order TP/SL — prevents intermediate keystrokes from
+  // triggering checkTPSL mid-type (e.g. typing "5610" passes through "5" which
+  // would immediately hit the TP condition and close the trade).
+  // Values are synced FROM activeOrder when it changes externally (drag, trailing stop).
+  // Values are committed TO activeOrder only on blur or Enter.
+  const [localTP, setLocalTP] = useState('')
+  const [localSL, setLocalSL] = useState('')
+
   const { candles, loading, isLive, contract } = useChartData(symbol, timeframe)
 
   const addPaperTrade           = useStore(s => s.addPaperTrade)
@@ -126,6 +134,19 @@ export default function PracticePage() {
   const handleTickPrice = useCallback((price) => {
     setTickPrice(price)
   }, [])
+
+  // Sync local TP/SL inputs from activeOrder when it changes externally
+  // (chart drag, trailing stop, new fill).  NOT on every tick — only when
+  // the stored order values actually change.
+  useEffect(() => {
+    if (activeOrder) {
+      setLocalTP(activeOrder.tp.toFixed(2))
+      setLocalSL(activeOrder.sl.toFixed(2))
+    } else {
+      setLocalTP('')
+      setLocalSL('')
+    }
+  }, [activeOrder?.tp, activeOrder?.sl, activeOrder?.entry])  // include entry so reset on new fill
 
   // ── Replay step ──────────────────────────────────────────────────────────
   const step = useCallback((n = 1) => {
@@ -356,6 +377,7 @@ export default function PracticePage() {
   function handleCancel() {
     setPendingOrder(null)
     setOrderMode(null)
+    setPendingGrade(null)
   }
 
   function handleCloseTrade() {
@@ -386,6 +408,8 @@ export default function PracticePage() {
     })
     setOrderResult({ win, pnl: +pnl.toFixed(0), r })
     setActiveOrder(null)
+    setAwaitingFill(null)
+    setTickPrice(null)
     setPlaying(false)
   }
 
@@ -1085,12 +1109,20 @@ export default function PracticePage() {
                   )}
                 </div>
 
-                {/* TP / SL rows with editable inputs */}
+                {/* TP / SL rows with editable inputs
+                    Local state prevents mid-type intermediate values (e.g. "5" while
+                    typing "5610") from triggering checkTPSL and closing the trade.
+                    Changes commit to activeOrder on blur or Enter only. */}
                 <div style={{ padding: '8px 12px' }}>
                   {[
-                    { label: 'TP', val: activeOrder.tp, color: '#4ade80', pts: tpPts, key: 'tp' },
-                    { label: 'SL', val: activeOrder.sl, color: '#f87171', pts: slPts, key: 'sl' },
-                  ].map((r, i) => (
+                    { label: 'TP', localVal: localTP, setLocal: setLocalTP, color: '#4ade80', pts: tpPts, key: 'tp' },
+                    { label: 'SL', localVal: localSL, setLocal: setLocalSL, color: '#f87171', pts: slPts, key: 'sl' },
+                  ].map((r, i) => {
+                    function commit() {
+                      const v = parseFloat(r.localVal)
+                      if (!isNaN(v)) handleUpdateActiveOrder({ [r.key]: v })
+                    }
+                    return (
                     <div key={r.label} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '5px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
@@ -1102,8 +1134,11 @@ export default function PracticePage() {
                         </span>
                       </div>
                       <input
-                        type="number" step="0.25" value={r.val}
-                        onChange={e => handleUpdateActiveOrder({ [r.key]: +e.target.value })}
+                        type="number" step="0.25"
+                        value={r.localVal}
+                        onChange={e => r.setLocal(e.target.value)}
+                        onBlur={commit}
+                        onKeyDown={e => { if (e.key === 'Enter') { commit(); e.target.blur() } }}
                         style={{
                           width: '84px', background: 'rgba(255,255,255,0.04)',
                           border: `1px solid ${r.color}44`,
@@ -1113,7 +1148,8 @@ export default function PracticePage() {
                         }}
                       />
                     </div>
-                  ))}
+                    )
+                  })}
 
                   <div style={{ fontSize: '9px', color: '#3a4460', textAlign: 'center', marginTop: '4px', marginBottom: '8px' }}>
                     Drag TP / SL lines on chart to adjust
