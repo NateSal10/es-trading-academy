@@ -107,7 +107,7 @@ export default function PracticePage() {
   const setMagnetEnabled        = useStore(s => s.setMagnetEnabled)
   const clearDrawings           = useStore(s => s.clearDrawings)
 
-  const DEFAULT_STOP_PTS = 10
+  const DEFAULT_STOP_PTS = 20
   const DAILY_LOSS_LIMIT = 1000  // Alpha Futures Zero rule
 
   const lastCandle = candles.length > 0
@@ -815,12 +815,17 @@ export default function PracticePage() {
                       key={side}
                       onClick={() => {
                         if (orderType === 'market') {
+                          // Market orders fill instantly (no confirmation step) — like TradingView paper trading
                           const entryPrice = livePrice ?? lastPrice
                           if (entryPrice == null) return
                           const stop = DEFAULT_STOP_PTS
                           const tp = side === 'LONG' ? entryPrice + stop * 2 : entryPrice - stop * 2
                           const sl = side === 'LONG' ? entryPrice - stop     : entryPrice + stop
-                          setPendingOrder({ side, orderType: 'market', entry: entryPrice, tp, sl })
+                          const currentCandleTime = replayMode
+                            ? (candles[replayIndex - 1]?.time ?? 0)
+                            : (candles.length > 0 ? candles[candles.length - 1].time : 0)
+                          const trailData = trailingEnabled ? { trailPts, trailSL: sl } : {}
+                          setActiveOrder({ side, orderType: 'market', entry: entryPrice, tp, sl, filledAtCandleTime: currentCandleTime, ...trailData })
                         } else {
                           setOrderMode(orderMode === side ? null : side)
                         }

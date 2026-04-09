@@ -469,7 +469,7 @@ const CHART_OPTIONS = {
   handleScale: { axisPressedMouseMove: true },
 }
 
-const DRAG_THRESHOLD = 14 // px from line centre to grab — larger = easier
+const DRAG_THRESHOLD = 20 // px from line centre to grab — larger = easier to hit
 
 export default function ChartContainer({
   candles,
@@ -491,6 +491,7 @@ export default function ChartContainer({
   magnetEnabled,        // boolean — snap clicks to OHLC
   onDrawingDone,        // () => void — called after a drawing is placed
 }) {
+  const containerRef = useRef(null)
   const mainElRef   = useRef(null)
   const rsiElRef    = useRef(null)
   const chartRef    = useRef(null)
@@ -1098,6 +1099,16 @@ export default function ChartContainer({
     document.addEventListener('mouseup', onUp)
   }, []) // no deps — uses refs only
 
+  // Register mousedown in CAPTURE phase so it fires before LWC's internal
+  // scroll/pan handlers, which would otherwise consume the event and prevent
+  // TP/SL drag from starting.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.addEventListener('mousedown', handleMouseDown, true)
+    return () => el.removeEventListener('mousedown', handleMouseDown, true)
+  }, [handleMouseDown])
+
   // Hover detection: change cursor when near any draggable TP/SL line
   // Also drives drawing preview ghost when placing a line/box second point
   const drawingToolRef   = useRef(drawingTool)
@@ -1355,8 +1366,8 @@ export default function ChartContainer({
 
   return (
     <div
+      ref={containerRef}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', cursor, paddingBottom: 16 }}
-      onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
