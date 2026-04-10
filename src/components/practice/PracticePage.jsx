@@ -68,7 +68,6 @@ export default function PracticePage() {
   const accountMode        = activeNamedAccount?.type ?? 'prop'
 
   const [showAccountManager, setShowAccountManager] = useState(false)
-  const [showPaperConfig, setShowPaperConfig] = useState(false)
   const [balanceInput,    setBalanceInput]    = useState('')
 
   // Order flow
@@ -427,7 +426,6 @@ export default function PracticePage() {
   function handleResetPaper() {
     const bal = parseFloat(balanceInput) || paperAccount.startingBalance
     resetPaperAccount(bal)
-    setShowPaperConfig(false)
     setBalanceInput('')
   }
 
@@ -436,7 +434,6 @@ export default function PracticePage() {
     if (bal > 0) {
       setPaperStartingBalance(bal)
       setBalanceInput('')
-      setShowPaperConfig(false)
     }
   }
 

@@ -3,9 +3,7 @@ import './styles/globals.css';
 import Header from './components/Header';
 import Nav from './components/Nav';
 import DashboardPage from './components/dashboard/DashboardPage';
-import ConceptsPage from './components/concepts/ConceptsPage';
 import PracticePage from './components/practice/PracticePage';
-import GlossaryPage from './components/glossary/GlossaryPage';
 import BacktestPage from './components/backtest/BacktestPage';
 import AuthPage from './components/auth/AuthPage';
 import MigrationPrompt from './components/auth/MigrationPrompt';
@@ -81,13 +79,11 @@ export default function App() {
       <Header signOut={signOut} userEmail={session.user.email} synced={hydrated} />
       <Nav active={tab} onSelect={setTab} />
       {tab === 'dashboard'   && <DashboardPage />}
-      {tab === 'concepts'    && <ConceptsPage />}
       {/* Practice stays mounted (hidden) so active trades survive tab switches */}
       <div style={{ display: tab === 'practice' ? 'contents' : 'none' }}>
         <PracticePage />
       </div>
       {tab === 'backtest'    && <BacktestPage />}
-      {tab === 'glossary'    && <GlossaryPage />}
     </>
   );
 }
