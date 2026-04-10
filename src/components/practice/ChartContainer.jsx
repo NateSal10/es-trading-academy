@@ -473,6 +473,7 @@ const DRAG_THRESHOLD = 20 // px from line centre to grab — larger = easier to 
 
 export default function ChartContainer({
   candles,
+  dataKey,
   replayIndex,
   isLive,
   playing,              // bool — replay is playing (drives tick animation)
@@ -1202,14 +1203,14 @@ export default function ChartContainer({
     }
   }, [visibleCandles])
 
-  // ── Auto-fit when ticker or timeframe changes (candles dataset replaced) ──────
-  // Watches the raw `candles` prop (not visibleCandles) so replay stepping does
-  // NOT trigger a fit — only a full dataset replacement (symbol/TF switch) does.
+  // ── Auto-fit when ticker or timeframe changes ────────────────────────────────
+  // Depends on dataKey (= symbol+timeframe) so it fires ONLY on a real dataset
+  // switch — NOT on every live poll that returns a new array reference.
   useEffect(() => {
     if (!candles.length) return
     chartRef.current?.timeScale().fitContent()
     rsiChartRef.current?.timeScale().fitContent()
-  }, [candles])
+  }, [dataKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── SMC overlays ─────────────────────────────────────────────────────────────
   // FVG and OB use canvas box primitives (start at formation candle, extend right).

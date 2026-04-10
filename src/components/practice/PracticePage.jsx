@@ -84,6 +84,12 @@ export default function PracticePage() {
   const [dailyLimitAck,     setDailyLimitAck]     = useState(false)  // user acknowledged daily limit banner
   const [pendingGrade,      setPendingGrade]       = useState(null)   // grade for the result trade (A+/A/B/C)
 
+  // Local input state for pending-order TP/SL — prevents partial keystrokes (e.g.
+  // deleting digits to retype) from writing NaN/0 into pendingOrder and crashing
+  // createPriceLine. Committed on blur or Enter.
+  const [localPendingTP, setLocalPendingTP] = useState('')
+  const [localPendingSL, setLocalPendingSL] = useState('')
+
   // Local input state for active-order TP/SL — prevents intermediate keystrokes from
   // triggering checkTPSL mid-type (e.g. typing "5610" passes through "5" which
   // would immediately hit the TP condition and close the trade).
@@ -133,6 +139,17 @@ export default function PracticePage() {
   const handleTickPrice = useCallback((price) => {
     setTickPrice(price)
   }, [])
+
+  // Sync local pending TP/SL from pendingOrder when it changes externally (new order, drag).
+  useEffect(() => {
+    if (pendingOrder) {
+      setLocalPendingTP(pendingOrder.tp.toFixed(2))
+      setLocalPendingSL(pendingOrder.sl.toFixed(2))
+    } else {
+      setLocalPendingTP('')
+      setLocalPendingSL('')
+    }
+  }, [pendingOrder?.tp, pendingOrder?.sl, pendingOrder?.entry])
 
   // Sync local TP/SL inputs from activeOrder when it changes externally
   // (chart drag, trailing stop, new fill).  NOT on every tick — only when
@@ -691,6 +708,7 @@ export default function PracticePage() {
           <div style={{ flex: 1, minHeight: 0 }}>
             <ChartContainer
               candles={candles}
+              dataKey={symbol + '-' + timeframe}
               replayIndex={replayMode ? replayIndex : 0}
               isLive={isLive}
               playing={playing}
@@ -911,11 +929,16 @@ export default function PracticePage() {
                       val: pendingOrder.entry, color: '#7eb5f7', key: 'entry', pts: null,
                     },
                   ]),
-                  { label: 'TP', val: pendingOrder.tp, color: '#4ade80', key: 'tp',
+                  { label: 'TP', localVal: localPendingTP, setLocal: setLocalPendingTP, color: '#4ade80', key: 'tp',
                     pts: +(pendingOrder.tp - pendingOrder.entry).toFixed(2) },
-                  { label: 'SL', val: pendingOrder.sl, color: '#f87171', key: 'sl',
+                  { label: 'SL', localVal: localPendingSL, setLocal: setLocalPendingSL, color: '#f87171', key: 'sl',
                     pts: +(pendingOrder.sl - pendingOrder.entry).toFixed(2) },
-                ].map((row, i) => (
+                ].map((row, i) => {
+                  function commitPending() {
+                    const v = parseFloat(row.localVal)
+                    if (!isNaN(v)) handleUpdateOrder({ [row.key]: v })
+                  }
+                  return (
                   <div key={row.label} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '5px 0',
@@ -930,8 +953,11 @@ export default function PracticePage() {
                       )}
                     </div>
                     <input
-                      type="number" step="0.25" value={row.val}
-                      onChange={e => handleUpdateOrder({ [row.key]: +e.target.value })}
+                      type="number" step="0.25"
+                      value={row.localVal}
+                      onChange={e => row.setLocal(e.target.value)}
+                      onBlur={commitPending}
+                      onKeyDown={e => { if (e.key === 'Enter') { commitPending(); e.target.blur() } }}
                       style={{
                         width: '84px', background: 'rgba(255,255,255,0.04)',
                         border: `1px solid ${row.color}44`,
@@ -941,7 +967,7 @@ export default function PracticePage() {
                       }}
                     />
                   </div>
-                ))}
+                )})}
 
                 {/* R:R bar */}
                 <div style={{
