@@ -761,19 +761,6 @@ export default function PracticePage() {
           background: 'var(--bg)', overflow: 'hidden auto', borderLeft: '1px solid var(--border)',
         }}>
 
-          {/* ── Debug state banner (temporary) ──────────────────────────── */}
-          <div style={{ padding: '4px 8px', background: '#1a1a2e', fontSize: '9px', color: '#7eb5f7', fontFamily: 'monospace', borderBottom: '1px solid var(--border)' }}>
-            mode={orderMode || '–'} pend={pendingOrder ? 'Y' : 'N'} await={awaitingFill ? 'Y' : 'N'} active={activeOrder ? 'Y' : 'N'} result={orderResult ? 'Y' : 'N'} flow={hasActiveFlow ? 'Y' : 'N'}
-          </div>
-
-          {/* ── Watchlist ───────────────────────────────────────────────────── */}
-          <div style={{ padding: '10px 10px 0' }}>
-            <WatchlistPanel
-              activeSymbol={symbol}
-              onSelectSymbol={(sym) => { setSymbol(sym); setOrderMode(null); setPendingOrder(null) }}
-            />
-          </div>
-
           {/* ── Account panel ──────────────────────────────────────────────── */}
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -1315,6 +1302,15 @@ export default function PracticePage() {
               </button>
             </div>
           )}
+
+          {/* ── Watchlist (collapsed when trading) ────────────────────────── */}
+          <div style={{ padding: '10px 10px 0' }}>
+            <WatchlistPanel
+              activeSymbol={symbol}
+              onSelectSymbol={(sym) => { setSymbol(sym); setOrderMode(null); setPendingOrder(null) }}
+              collapsed={hasActiveFlow}
+            />
+          </div>
 
           {/* ── Indicators ───────────────────────────────────────────────────── */}
           <div style={{ padding: '14px', flex: 1 }}>

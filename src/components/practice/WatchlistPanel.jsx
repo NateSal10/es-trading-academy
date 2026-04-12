@@ -8,7 +8,7 @@ function displaySym(sym) {
   return sym.replace('=F', '').replace('.CME', '')
 }
 
-export default function WatchlistPanel({ activeSymbol, onSelectSymbol }) {
+export default function WatchlistPanel({ activeSymbol, onSelectSymbol, collapsed = false }) {
   const watchlist          = useStore(s => s.watchlist)
   const addToWatchlist     = useStore(s => s.addToWatchlist)
   const removeFromWatchlist = useStore(s => s.removeFromWatchlist)
@@ -29,10 +29,23 @@ export default function WatchlistPanel({ activeSymbol, onSelectSymbol }) {
     : POPULAR.filter(t => !watchlist.includes(t)).slice(0, 6)
   const showCustomAdd = query && !POPULAR.includes(query) && !watchlist.includes(query)
 
-  return (
-    <div className="panel-section" style={{ borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
-      <div className="panel-title" style={{ marginBottom: 8 }}>Watchlist</div>
+  const [manualExpand, setManualExpand] = useState(false)
+  const isCollapsed = collapsed && !manualExpand
 
+  return (
+    <div className="panel-section" style={{ borderBottom: '1px solid var(--border)', paddingBottom: isCollapsed ? 4 : 10 }}>
+      <div
+        className="panel-title"
+        style={{ marginBottom: isCollapsed ? 0 : 8, cursor: collapsed ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        onClick={() => { if (collapsed) setManualExpand(e => !e) }}
+      >
+        Watchlist
+        {collapsed && (
+          <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 400 }}>{isCollapsed ? '▸' : '▾'}</span>
+        )}
+      </div>
+
+      {isCollapsed ? null : <>
       {/* Search / Add input */}
       <div style={{ position: 'relative', marginBottom: 6 }}>
         <input
@@ -167,6 +180,7 @@ export default function WatchlistPanel({ activeSymbol, onSelectSymbol }) {
           </div>
         )
       })}
+      </>}
     </div>
   )
 }
