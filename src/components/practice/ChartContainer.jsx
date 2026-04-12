@@ -488,6 +488,7 @@ export default function ChartContainer({
   onUpdateActiveOrder,    // ({ tp?, sl? }) => void  — updates activeOrder
   onUpdateAwaitingFill,   // ({ tp?, sl? }) => void  — updates awaitingFill TP/SL
   onTickPrice,            // (price: number) => void — called on each tick with simulated close
+  contracts = 1,        // number — contract quantity for label display
   drawingTool,          // null | 'hline' | 'line' | 'box'
   magnetEnabled,        // boolean — snap clicks to OHLC
   onDrawingDone,        // () => void — called after a drawing is placed
@@ -722,19 +723,23 @@ export default function ChartContainer({
 
   // ── TV-style line label helpers ────────────────────────────────────────────
   // Returns "TP  +5.25 pts  +$263" or "SL  -10.50 pts  -$525"
-  function tpLabel(tpPrice, entryPrice) {
+  function tpLabel(tpPrice, entryPrice, ct) {
     const pv   = pointValue ?? 50
+    const qty  = ct || contracts || 1
     const pts  = tpPrice - entryPrice
     const sign = pts >= 0 ? '+' : ''
-    const $val = Math.round(Math.abs(pts) * pv)
-    return `TP   ${sign}${pts.toFixed(2)} pts   ${sign}$${$val.toLocaleString()}`
+    const $val = Math.round(Math.abs(pts) * pv * qty)
+    const qtyStr = qty > 1 ? `  (${qty}ct)` : ''
+    return `TP   ${sign}${pts.toFixed(2)} pts   ${sign}$${$val.toLocaleString()}${qtyStr}`
   }
-  function slLabel(slPrice, entryPrice) {
+  function slLabel(slPrice, entryPrice, ct) {
     const pv   = pointValue ?? 50
+    const qty  = ct || contracts || 1
     const pts  = slPrice - entryPrice
     const sign = pts >= 0 ? '+' : ''
-    const $val = Math.round(Math.abs(pts) * pv)
-    return `SL   ${sign}${pts.toFixed(2)} pts   ${pts >= 0 ? '+' : '-'}$${$val.toLocaleString()}`
+    const $val = Math.round(Math.abs(pts) * pv * qty)
+    const qtyStr = qty > 1 ? `  (${qty}ct)` : ''
+    return `SL   ${sign}${pts.toFixed(2)} pts   ${pts >= 0 ? '+' : '-'}$${$val.toLocaleString()}${qtyStr}`
   }
 
   // ── Order price lines (pending & active) ──────────────────────────────────
@@ -775,13 +780,14 @@ export default function ChartContainer({
           title: `TRIGGER   ${awaitingFill.stopTrigger.toFixed(2)}`,
         })
       }
+      const aCt = awaitingFill.contracts || contracts || 1
       orderLinesRef.current.tp = cs.createPriceLine({
         price: awaitingFill.tp, color: '#26a69a', lineWidth: 2, lineStyle: LineStyle.Solid,
-        axisLabelVisible: true, title: tpLabel(awaitingFill.tp, awaitingFill.entry),
+        axisLabelVisible: true, title: tpLabel(awaitingFill.tp, awaitingFill.entry, aCt),
       })
       orderLinesRef.current.sl = cs.createPriceLine({
         price: awaitingFill.sl, color: '#ef5350', lineWidth: 2, lineStyle: LineStyle.Solid,
-        axisLabelVisible: true, title: slLabel(awaitingFill.sl, awaitingFill.entry),
+        axisLabelVisible: true, title: slLabel(awaitingFill.sl, awaitingFill.entry, aCt),
       })
       return
     }
@@ -790,6 +796,7 @@ export default function ChartContainer({
     if (!order) return
 
     const entryColor = order.side === 'LONG' ? '#26a69a' : '#ef5350'
+    const oCt = order.contracts || contracts || 1
 
     orderLinesRef.current.entry = cs.createPriceLine({
       price: order.entry,
@@ -797,7 +804,7 @@ export default function ChartContainer({
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
       axisLabelVisible: true,
-      title: `${order.side}   ${order.entry.toFixed(2)}`,
+      title: `${order.side}   ${order.entry.toFixed(2)}${oCt > 1 ? `  (${oCt}ct)` : ''}`,
     })
     // For stop-limit: also show the trigger line
     if (order.orderType === 'stop_limit' && order.stopTrigger != null) {
@@ -816,7 +823,7 @@ export default function ChartContainer({
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
       axisLabelVisible: true,
-      title: tpLabel(order.tp, order.entry),
+      title: tpLabel(order.tp, order.entry, oCt),
     })
     orderLinesRef.current.sl = cs.createPriceLine({
       price: order.sl,
@@ -824,28 +831,30 @@ export default function ChartContainer({
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
       axisLabelVisible: true,
-      title: slLabel(order.sl, order.entry),
+      title: slLabel(order.sl, order.entry, oCt),
     })
-  }, [pendingOrder, activeOrder, awaitingFill])
+  }, [pendingOrder, activeOrder, awaitingFill, contracts])
 
   // ── Update price lines when order changes ─────────────────────────────────
   useEffect(() => {
     const ol = orderLinesRef.current
     const order = pendingOrder || activeOrder
     if (!order) return
-    if (ol.tp)    ol.tp.applyOptions({ price: order.tp, title: tpLabel(order.tp, order.entry) })
-    if (ol.sl)    ol.sl.applyOptions({ price: order.sl, title: slLabel(order.sl, order.entry) })
-    if (ol.entry) ol.entry.applyOptions({ price: order.entry, title: `${order.side}   ${order.entry.toFixed(2)}` })
+    const oCt = order.contracts || contracts || 1
+    if (ol.tp)    ol.tp.applyOptions({ price: order.tp, title: tpLabel(order.tp, order.entry, oCt) })
+    if (ol.sl)    ol.sl.applyOptions({ price: order.sl, title: slLabel(order.sl, order.entry, oCt) })
+    if (ol.entry) ol.entry.applyOptions({ price: order.entry, title: `${order.side}   ${order.entry.toFixed(2)}${oCt > 1 ? `  (${oCt}ct)` : ''}` })
     if (ol.trigger && order.stopTrigger != null) ol.trigger.applyOptions({ price: order.stopTrigger, title: `TRIGGER   ${order.stopTrigger.toFixed(2)}` })
-  }, [pendingOrder?.tp, pendingOrder?.sl, pendingOrder?.entry, pendingOrder?.stopTrigger, activeOrder?.tp, activeOrder?.sl])
+  }, [pendingOrder?.tp, pendingOrder?.sl, pendingOrder?.entry, pendingOrder?.stopTrigger, activeOrder?.tp, activeOrder?.sl, contracts])
 
   // ── Update TP/SL lines while awaiting fill (so drag updates are reflected) ─
   useEffect(() => {
     const ol = orderLinesRef.current
     if (!awaitingFill || pendingOrder || activeOrder) return
-    if (ol.tp) ol.tp.applyOptions({ price: awaitingFill.tp, title: tpLabel(awaitingFill.tp, awaitingFill.entry) })
-    if (ol.sl) ol.sl.applyOptions({ price: awaitingFill.sl, title: slLabel(awaitingFill.sl, awaitingFill.entry) })
-  }, [awaitingFill?.tp, awaitingFill?.sl])
+    const aCt = awaitingFill.contracts || contracts || 1
+    if (ol.tp) ol.tp.applyOptions({ price: awaitingFill.tp, title: tpLabel(awaitingFill.tp, awaitingFill.entry, aCt) })
+    if (ol.sl) ol.sl.applyOptions({ price: awaitingFill.sl, title: slLabel(awaitingFill.sl, awaitingFill.entry, aCt) })
+  }, [awaitingFill?.tp, awaitingFill?.sl, contracts])
 
   // Keep refs in sync so document listeners always see fresh values
   useEffect(() => { pendingOrderRef.current        = pendingOrder        }, [pendingOrder])
@@ -978,8 +987,23 @@ export default function ChartContainer({
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
 
+    // ── Helper: check if mouse is near a TP/SL/Entry order line ──────────────
+    function nearOrderLine() {
+      const order = pendingOrderRef.current || activeOrderRef.current || awaitingFillRef.current
+      if (!order) return false
+      const y = chartY(e.clientY)
+      if (y == null) return false
+      const tpCoord    = cs.priceToCoordinate(order.tp)
+      const slCoord    = cs.priceToCoordinate(order.sl)
+      const entryCoord = cs.priceToCoordinate(order.entry)
+      return (tpCoord    != null && Math.abs(y - tpCoord)    <= DRAG_THRESHOLD) ||
+             (slCoord    != null && Math.abs(y - slCoord)    <= DRAG_THRESHOLD) ||
+             (entryCoord != null && Math.abs(y - entryCoord) <= DRAG_THRESHOLD)
+    }
+
     // ── 1. Drawing drag / select (only when no drawing tool is placing) ───────
-    if (!drawingToolRef.current) {
+    // Skip drawing hit-test when mouse is near an order line — order lines take priority
+    if (!drawingToolRef.current && !nearOrderLine()) {
       const dl = drawingsRef.current
       const ts = chart.timeScale()
       for (let i = dl.length - 1; i >= 0; i--) {
@@ -1057,6 +1081,7 @@ export default function ChartContainer({
     e.stopPropagation()
     chart.applyOptions({ handleScroll: false, handleScale: false })
 
+    const orderContracts = order.contracts || 1
     function onMove(ev) {
       const price = priceAt(ev.clientY)
       if (price == null) return
@@ -1082,7 +1107,7 @@ export default function ChartContainer({
         setDragDisplay({
           label,
           pts:     +pts.toFixed(2),
-          dollars: Math.round(pts * pv),
+          dollars: Math.round(pts * pv * orderContracts),
           y:       chartY(ev.clientY) ?? 0,
         })
       }

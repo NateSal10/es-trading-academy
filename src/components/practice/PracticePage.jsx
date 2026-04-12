@@ -83,6 +83,7 @@ export default function PracticePage() {
   const [trailPts,          setTrailPts]          = useState(10)
   const [dailyLimitAck,     setDailyLimitAck]     = useState(false)  // user acknowledged daily limit banner
   const [pendingGrade,      setPendingGrade]       = useState(null)   // grade for the result trade (A+/A/B/C)
+  const [contracts,         setContracts]         = useState(1)      // number of contracts to trade
 
   // Local input state for pending-order TP/SL — prevents partial keystrokes (e.g.
   // deleting digits to retype) from writing NaN/0 into pendingOrder and crashing
@@ -114,6 +115,7 @@ export default function PracticePage() {
 
   const DEFAULT_STOP_PTS = 20
   const DAILY_LOSS_LIMIT = 1000  // Alpha Futures Zero rule
+  const MAX_CONTRACTS    = accountMode === 'prop' ? 3 : 10
 
   const lastCandle = candles.length > 0
     ? candles[replayMode ? Math.max(0, replayIndex - 1) : candles.length - 1]
@@ -131,7 +133,7 @@ export default function PracticePage() {
       .filter(t => t.accountType === accountMode && (t.date || '').startsWith(todayStr))
       .reduce((s, t) => s + (t.pnl || 0), 0)
   const unrealizedPnL = activeOrder && livePrice != null
-    ? (activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pointValue(symbol)
+    ? (activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pointValue(symbol) * (activeOrder.contracts || 1)
     : 0
   const dailyTotalPnL     = dailyClosedPnL + unrealizedPnL
   const dailyLimitReached = dailyTotalPnL <= -DAILY_LOSS_LIMIT
@@ -231,12 +233,13 @@ export default function PracticePage() {
     }
 
     const sl = currentSL
+    const ct = activeOrder.contracts || 1
     const hit = (side === 'LONG')
-      ? candle.high >= tp ? { win: true,  pnl: (tp - entry) * pv, exit: tp,  r: +(Math.abs(tp - entry) / Math.abs(entry - sl)).toFixed(1) }
-      : candle.low  <= sl ? { win: false, pnl: (sl - entry) * pv, exit: sl,  r: -1 }
+      ? candle.high >= tp ? { win: true,  pnl: (tp - entry) * pv * ct, exit: tp,  r: +(Math.abs(tp - entry) / Math.abs(entry - sl)).toFixed(1) }
+      : candle.low  <= sl ? { win: false, pnl: (sl - entry) * pv * ct, exit: sl,  r: -1 }
       : null
-      : candle.low  <= tp ? { win: true,  pnl: (entry - tp) * pv, exit: tp,  r: +(Math.abs(entry - tp) / Math.abs(sl - entry)).toFixed(1) }
-      : candle.high >= sl ? { win: false, pnl: (entry - sl) * pv, exit: sl,  r: -1 }
+      : candle.low  <= tp ? { win: true,  pnl: (entry - tp) * pv * ct, exit: tp,  r: +(Math.abs(entry - tp) / Math.abs(sl - entry)).toFixed(1) }
+      : candle.high >= sl ? { win: false, pnl: (entry - sl) * pv * ct, exit: sl,  r: -1 }
       : null
     if (hit) {
       const tradeId = crypto.randomUUID()
@@ -248,6 +251,7 @@ export default function PracticePage() {
         symbol, side, entry, tp, sl,
         exit: hit.exit,
         pnl: hit.pnl, r: hit.r,
+        contracts: ct,
         closePrice: hit.exit,
         status: 'closed',
         date: new Date().toISOString(),
@@ -338,9 +342,10 @@ export default function PracticePage() {
         : undefined,
       tp,
       sl,
+      contracts,
     })
     setOrderMode(null)
-  }, [orderMode, orderType, replayMode, lastPrice])
+  }, [orderMode, orderType, replayMode, lastPrice, contracts])
 
   function handleUpdateOrder(patch) {
     setPendingOrder(o => o ? { ...o, ...patch } : o)
@@ -398,11 +403,14 @@ export default function PracticePage() {
 
   function handleCloseTrade() {
     const exitPrice = livePrice
-    if (!activeOrder || exitPrice == null) return
+    if (!activeOrder) return
+    if (exitPrice == null) { setOrderValidError('No price data — cannot close'); return }
+    setOrderValidError(null)
     const pv  = pointValue(symbol)
+    const ct  = activeOrder.contracts || 1
     const pnl = (activeOrder.side === 'LONG'
       ? exitPrice - activeOrder.entry
-      : activeOrder.entry - exitPrice) * pv
+      : activeOrder.entry - exitPrice) * pv * ct
     const win = pnl > 0
     const risk = Math.abs(activeOrder.entry - activeOrder.sl)
     const r    = risk > 0 ? +(Math.abs(exitPrice - activeOrder.entry) / risk).toFixed(1) : 0
@@ -417,6 +425,7 @@ export default function PracticePage() {
       tp: activeOrder.tp, sl: activeOrder.sl,
       pnl: +pnl.toFixed(0),
       r,
+      contracts: ct,
       closePrice: exitPrice,
       status: 'closed',
       date: new Date().toISOString(),
@@ -723,6 +732,7 @@ export default function PracticePage() {
               onUpdateActiveOrder={handleUpdateActiveOrder}
               onUpdateAwaitingFill={handleUpdateAwaitingFill}
               onTickPrice={handleTickPrice}
+              contracts={pendingOrder?.contracts || activeOrder?.contracts || awaitingFill?.contracts || contracts}
               drawingTool={drawingTool}
               magnetEnabled={magnetEnabled}
               onDrawingDone={() => setDrawingTool(null)}
@@ -832,7 +842,8 @@ export default function PracticePage() {
                         if (orderType === 'market') {
                           // Market orders fill instantly (no confirmation step) — like TradingView paper trading
                           const entryPrice = livePrice ?? lastPrice
-                          if (entryPrice == null) return
+                          if (entryPrice == null) { setOrderValidError('Waiting for price data…'); return }
+                          setOrderValidError(null)
                           const stop = DEFAULT_STOP_PTS
                           const tp = side === 'LONG' ? entryPrice + stop * 2 : entryPrice - stop * 2
                           const sl = side === 'LONG' ? entryPrice - stop     : entryPrice + stop
@@ -840,7 +851,7 @@ export default function PracticePage() {
                             ? (candles[replayIndex - 1]?.time ?? 0)
                             : (candles.length > 0 ? candles[candles.length - 1].time : 0)
                           const trailData = trailingEnabled ? { trailPts, trailSL: sl } : {}
-                          setActiveOrder({ side, orderType: 'market', entry: entryPrice, tp, sl, filledAtCandleTime: currentCandleTime, ...trailData })
+                          setActiveOrder({ side, orderType: 'market', entry: entryPrice, tp, sl, contracts, filledAtCandleTime: currentCandleTime, ...trailData })
                         } else {
                           setOrderMode(orderMode === side ? null : side)
                         }
@@ -888,6 +899,39 @@ export default function PracticePage() {
                   </div>
                 )}
               </div>
+
+              {/* Contracts */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>Contracts</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <button onClick={() => setContracts(c => Math.max(1, c - 1))} style={{
+                    width: 22, height: 22, border: '1px solid var(--border)', borderRadius: 4,
+                    background: 'var(--bg3)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
+                  }}>-</button>
+                  <input type="number" min="1" max={MAX_CONTRACTS} value={contracts}
+                    onChange={e => setContracts(Math.max(1, Math.min(MAX_CONTRACTS, +e.target.value || 1)))}
+                    style={{
+                      width: 36, background: 'var(--bg3)', border: '1px solid var(--border)',
+                      borderRadius: 4, color: 'var(--text)', padding: '3px 4px', fontSize: 13,
+                      fontWeight: 700, fontFamily: 'monospace', textAlign: 'center',
+                    }} />
+                  <button onClick={() => setContracts(c => Math.min(MAX_CONTRACTS, c + 1))} style={{
+                    width: 22, height: 22, border: '1px solid var(--border)', borderRadius: 4,
+                    background: 'var(--bg3)', color: 'var(--muted)', cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
+                  }}>+</button>
+                  {accountMode === 'prop' && (
+                    <span style={{ fontSize: '9px', color: 'var(--muted)', marginLeft: 2 }}>max {MAX_CONTRACTS}</span>
+                  )}
+                </div>
+              </div>
+
+              {orderValidError && (
+                <div style={{ marginTop: '4px', fontSize: '11px', color: '#f87171', background: 'rgba(239,68,68,0.08)', padding: '5px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                  {orderValidError}
+                </div>
+              )}
             </div>
           )}
 
@@ -944,11 +988,11 @@ export default function PracticePage() {
                     padding: '5px 0',
                     borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', color: '#4a5580', fontWeight: 600, minWidth: '40px' }}>{row.label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '10px', color: '#4a5580', fontWeight: 600, minWidth: '28px' }}>{row.label}</span>
                       {row.pts !== null && (
                         <span style={{ fontSize: '9px', color: row.pts > 0 ? '#4ade8099' : '#f8717199', fontFamily: 'monospace' }}>
-                          {row.pts > 0 ? '+' : ''}{row.pts}
+                          {row.pts > 0 ? '+' : ''}{row.pts} · {fmt$(Math.abs(row.pts) * pointValue(symbol) * (pendingOrder.contracts || 1), row.pts > 0)}
                         </span>
                       )}
                     </div>
@@ -981,7 +1025,7 @@ export default function PracticePage() {
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '9px', color: '#4a5580', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '1px' }}>Max Risk</div>
                     <div style={{ fontSize: '14px', fontWeight: 700, color: '#f87171', fontFamily: 'monospace' }}>
-                      {fmt$(Math.abs(pendingOrder.entry - pendingOrder.sl) * pointValue(symbol))}
+                      {fmt$(Math.abs(pendingOrder.entry - pendingOrder.sl) * pointValue(symbol) * (pendingOrder.contracts || 1))}
                     </div>
                   </div>
                 </div>
@@ -1094,10 +1138,11 @@ export default function PracticePage() {
           {/* ── Active trade (TV-style) ──────────────────────────────────────── */}
           {activeOrder && (() => {
             const pv  = pointValue(symbol)
+            const ct  = activeOrder.contracts || 1
             const uPnL = livePrice != null
-              ? (activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pv
-              : null
-            const isProfit = uPnL != null && uPnL >= 0
+              ? (activeOrder.side === 'LONG' ? livePrice - activeOrder.entry : activeOrder.entry - livePrice) * pv * ct
+              : 0
+            const isProfit = uPnL >= 0
             const sideColor = activeOrder.side === 'LONG' ? '#4ade80' : '#f87171'
             const tpPts = +(activeOrder.tp - activeOrder.entry).toFixed(2)
             const slPts = +(activeOrder.sl - activeOrder.entry).toFixed(2)
@@ -1109,6 +1154,7 @@ export default function PracticePage() {
                 borderRadius: '6px',
                 background: activeOrder.side === 'LONG' ? 'rgba(22,163,74,0.04)' : 'rgba(220,38,38,0.04)',
                 overflow: 'hidden',
+                animation: 'fadeIn 0.3s ease-out',
               }}>
                 {/* Header: side + entry + unrealized */}
                 <div style={{
@@ -1119,22 +1165,21 @@ export default function PracticePage() {
                   <div>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: sideColor }}>
                       {activeOrder.side === 'LONG' ? '▲ LONG' : '▼ SHORT'}
+                      {ct > 1 && <span style={{ fontSize: '10px', color: '#6b7a9e', marginLeft: 5 }}>{ct}ct</span>}
                     </div>
                     <div style={{ fontSize: '10px', color: '#6b7a9e', marginTop: '1px', fontFamily: 'monospace' }}>
                       Entry {activeOrder.entry.toFixed(2)}
                     </div>
                   </div>
-                  {uPnL != null && (
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '9px', color: '#4a5580', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized</div>
-                      <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'monospace', color: isProfit ? '#4ade80' : '#f87171' }}>
-                        {fmt$(uPnL, true)}
-                      </div>
-                      {livePrice && (
-                        <div style={{ fontSize: '9px', color: '#4a5580', fontFamily: 'monospace' }}>@ {livePrice.toFixed(2)}</div>
-                      )}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '9px', color: '#4a5580', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized</div>
+                    <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'monospace', color: isProfit ? '#4ade80' : '#f87171' }}>
+                      {fmt$(uPnL, true)}
                     </div>
-                  )}
+                    {livePrice != null && (
+                      <div style={{ fontSize: '9px', color: '#4a5580', fontFamily: 'monospace' }}>@ {livePrice.toFixed(2)}</div>
+                    )}
+                  </div>
                 </div>
 
                 {/* TP / SL rows with editable inputs
@@ -1155,10 +1200,10 @@ export default function PracticePage() {
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '5px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                     }}>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <span style={{ fontSize: '10px', color: '#4a5580', fontWeight: 600, minWidth: '18px' }}>{r.label}</span>
                         <span style={{ fontSize: '9px', color: `${r.color}99`, fontFamily: 'monospace' }}>
-                          {r.pts > 0 ? '+' : ''}{r.pts}
+                          {r.pts > 0 ? '+' : ''}{r.pts} · {fmt$(Math.abs(r.pts) * pv * ct, r.pts > 0)}
                         </span>
                       </div>
                       <input
@@ -1183,16 +1228,23 @@ export default function PracticePage() {
                     Drag TP / SL lines on chart to adjust
                   </div>
 
+                  {orderValidError && (
+                    <div style={{ marginBottom: '6px', fontSize: '11px', color: '#f87171', background: 'rgba(239,68,68,0.08)', padding: '5px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                      {orderValidError}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button onClick={handleCloseTrade} style={{
                       flex: 1, padding: '10px', border: 'none',
                       borderRadius: '5px',
-                      background: activeOrder.side === 'LONG' ? '#7f1d1d' : '#14532d',
-                      color: activeOrder.side === 'LONG' ? '#f87171' : '#4ade80',
-                      cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'inherit',
+                      background: livePrice == null ? '#1a1a2e' : (activeOrder.side === 'LONG' ? '#7f1d1d' : '#14532d'),
+                      color: livePrice == null ? '#4a5580' : (activeOrder.side === 'LONG' ? '#f87171' : '#4ade80'),
+                      cursor: livePrice == null ? 'not-allowed' : 'pointer',
+                      fontSize: '12px', fontWeight: 700, fontFamily: 'inherit',
                       transition: 'filter .12s',
                     }}
-                      onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.2)'}
+                      onMouseEnter={e => { if (livePrice != null) e.currentTarget.style.filter = 'brightness(1.2)' }}
                       onMouseLeave={e => e.currentTarget.style.filter = ''}
                     >
                       ✕ Close @ Market
