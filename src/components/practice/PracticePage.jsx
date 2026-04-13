@@ -105,6 +105,7 @@ export default function PracticePage() {
   const updatePaperTrade        = useStore(s => s.updatePaperTrade)
   const paperAccount            = useStore(s => s.paperAccount)
   const lastTradeIdRef          = useRef(null)
+  const sidePanelRef            = useRef(null)
   const account                 = useStore(s => s.account)
   const resetPaperAccount       = useStore(s => s.resetPaperAccount)
   const resetAccount            = useStore(s => s.resetAccount)
@@ -474,6 +475,16 @@ export default function PracticePage() {
 
   const hasActiveFlow = !!pendingOrder || !!awaitingFill || !!activeOrder
 
+  // Scroll sidebar to top whenever trade flow starts so the trade card is always visible
+  useEffect(() => {
+    if (hasActiveFlow && sidePanelRef.current) sidePanelRef.current.scrollTop = 0
+  }, [hasActiveFlow])
+
+  // Also scroll when fill happens (awaitingFill → activeOrder keeps hasActiveFlow true, so above won't re-fire)
+  useEffect(() => {
+    if (activeOrder && sidePanelRef.current) sidePanelRef.current.scrollTop = 0
+  }, [activeOrder])
+
   return (
     <div style={{
       height: 'calc(100vh - 96px)',
@@ -756,7 +767,7 @@ export default function PracticePage() {
         </div>
 
         {/* Side panel */}
-        <div style={{
+        <div ref={sidePanelRef} style={{
           width: '260px', flexShrink: 0, display: 'flex', flexDirection: 'column',
           background: 'var(--bg)', overflow: 'hidden auto', borderLeft: '1px solid var(--border)',
         }}>
