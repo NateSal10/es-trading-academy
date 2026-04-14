@@ -764,8 +764,11 @@ export default function PracticePage() {
         {/* Side panel */}
         <div style={{
           width: '260px', flexShrink: 0, display: 'flex', flexDirection: 'column',
-          background: 'var(--bg)', overflow: 'hidden auto', borderLeft: '1px solid var(--border)',
+          background: 'var(--bg)', overflowY: 'auto', borderLeft: '1px solid var(--border)',
         }}>
+
+          {/* ── Sticky top: account + trade flow (always visible) ──────────── */}
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg)' }}>
 
           {/* ── Account panel ──────────────────────────────────────────────── */}
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
@@ -1309,6 +1312,8 @@ export default function PracticePage() {
             </div>
           )}
 
+          </div>{/* end sticky top */}
+
           {/* ── Watchlist (collapsed when trading) ────────────────────────── */}
           <div style={{ padding: '10px 10px 0' }}>
             <WatchlistPanel
@@ -1319,7 +1324,7 @@ export default function PracticePage() {
           </div>
 
           {/* ── Indicators ───────────────────────────────────────────────────── */}
-          <div style={{ padding: '14px', flex: 1 }}>
+          <div style={{ padding: '14px' }}>
             <IndicatorPanel />
           </div>
 
