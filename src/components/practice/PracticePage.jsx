@@ -767,8 +767,8 @@ export default function PracticePage() {
           background: 'var(--bg)', overflowY: 'auto', borderLeft: '1px solid var(--border)',
         }}>
 
-          {/* ── Sticky top: account + trade flow (always visible) ──────────── */}
-          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg)' }}>
+          {/* ── Account + trade flow ────────────────────────────────────────── */}
+          <div>
 
           {/* ── Account panel ──────────────────────────────────────────────── */}
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
