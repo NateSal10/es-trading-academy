@@ -105,6 +105,7 @@ export default function PracticePage() {
   const updatePaperTrade        = useStore(s => s.updatePaperTrade)
   const paperAccount            = useStore(s => s.paperAccount)
   const lastTradeIdRef          = useRef(null)
+  const activeTradeRef          = useRef(null)
   const account                 = useStore(s => s.account)
   const resetPaperAccount       = useStore(s => s.resetPaperAccount)
   const resetAccount            = useStore(s => s.resetAccount)
@@ -474,6 +475,11 @@ export default function PracticePage() {
 
   const hasActiveFlow = !!pendingOrder || !!awaitingFill || !!activeOrder
 
+  // When trade becomes active, scroll it into view regardless of sidebar scroll position
+  useEffect(() => {
+    if (activeOrder) activeTradeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+  }, [activeOrder])
+
   return (
     <div style={{
       height: 'calc(100vh - 96px)',
@@ -758,11 +764,8 @@ export default function PracticePage() {
         {/* Side panel */}
         <div style={{
           width: '260px', flexShrink: 0, display: 'flex', flexDirection: 'column',
-          background: 'var(--bg)', overflow: 'hidden', borderLeft: '1px solid var(--border)',
+          background: 'var(--bg)', overflow: 'hidden auto', borderLeft: '1px solid var(--border)',
         }}>
-
-          {/* ── Trade-critical: always visible, never scrolled away ─────────── */}
-          <div style={{ flexShrink: 0 }}>
 
           {/* ── Account panel ──────────────────────────────────────────────── */}
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
@@ -1142,7 +1145,7 @@ export default function PracticePage() {
             const tpPts = +(activeOrder.tp - activeOrder.entry).toFixed(2)
             const slPts = +(activeOrder.sl - activeOrder.entry).toFixed(2)
             return (
-              <div style={{
+              <div ref={activeTradeRef} style={{
                 margin: '10px',
                 border: `1px solid ${activeOrder.side === 'LONG' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
                 borderLeft: `3px solid ${sideColor}`,
@@ -1306,11 +1309,6 @@ export default function PracticePage() {
             </div>
           )}
 
-          </div>{/* end trade-critical section */}
-
-          {/* ── Scrollable reference section ─────────────────────────────────── */}
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-
           {/* ── Watchlist (collapsed when trading) ────────────────────────── */}
           <div style={{ padding: '10px 10px 0' }}>
             <WatchlistPanel
@@ -1344,8 +1342,6 @@ export default function PracticePage() {
               ))}
             </div>
           )}
-
-          </div>{/* end scrollable section */}
         </div>
       </div>
 
