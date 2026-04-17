@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useOrderFills } from '../../hooks/useOrderFills';
 import { useChartData, TF_CONFIG } from '../../hooks/useChartData'
 import ChartContainer from './ChartContainer'
 import ReplayControls from './ReplayControls'
@@ -189,79 +190,28 @@ export default function PracticePage() {
     }
   }
 
+  // ── Replay keyboard shortcuts ───────────────────────────────────────────
+  useEffect(() => {
+    if (!replayMode) return
+    function handleKey(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      switch (e.key) {
+        case ' ':         e.preventDefault(); setPlaying(p => !p); break
+        case 'ArrowRight': e.preventDefault(); step(e.shiftKey ? 5 : 1); break
+        case 'ArrowLeft':  e.preventDefault(); step(e.shiftKey ? -5 : -1); break
+        case 'Home':       e.preventDefault(); setReplayIndex(1); setPlaying(false); break
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [replayMode, step])
+
   // ── Shared fill + TP/SL check logic ─────────────────────────────────────
-  function checkFill(candle) {
-    if (!candle) return
-    if (awaitingFill) {
-      const { side, orderType: type, entry, stopTrigger } = awaitingFill
-      let filled = false
-      if (type === 'limit') {
-        if (side === 'LONG'  && candle.low  <= entry) filled = true
-        if (side === 'SHORT' && candle.high >= entry) filled = true
-      } else if (type === 'stop') {
-        if (side === 'LONG'  && candle.high >= entry) filled = true
-        if (side === 'SHORT' && candle.low  <= entry) filled = true
-      } else if (type === 'stop_limit') {
-        const trigger = stopTrigger ?? entry
-        if (side === 'LONG'  && candle.high >= trigger && candle.low  <= entry) filled = true
-        if (side === 'SHORT' && candle.low  <= trigger && candle.high >= entry) filled = true
-      }
-      if (filled) { setActiveOrder({ ...awaitingFill, filledAtCandleTime: candle.time }); setAwaitingFill(null) }
-    }
-  }
-
-  function checkTPSL(candle) {
-    if (!candle || !activeOrder) return
-    const { side, entry, tp, trailPts: tPts, trailSL } = activeOrder
-    const pv = pointValue(symbol)
-
-    // ── Trailing stop: advance SL as price moves in favor ─────────────────
-    let currentSL = activeOrder.sl
-    if (tPts && trailSL != null) {
-      if (side === 'LONG') {
-        const newTrailSL = candle.high - tPts
-        if (newTrailSL > trailSL) {
-          currentSL = newTrailSL
-          setActiveOrder(o => o ? { ...o, sl: newTrailSL, trailSL: newTrailSL } : o)
-        }
-      } else {
-        const newTrailSL = candle.low + tPts
-        if (newTrailSL < trailSL) {
-          currentSL = newTrailSL
-          setActiveOrder(o => o ? { ...o, sl: newTrailSL, trailSL: newTrailSL } : o)
-        }
-      }
-    }
-
-    const sl = currentSL
-    const ct = activeOrder.contracts || 1
-    const hit = (side === 'LONG')
-      ? candle.high >= tp ? { win: true,  pnl: (tp - entry) * pv * ct, exit: tp,  r: +(Math.abs(tp - entry) / Math.abs(entry - sl)).toFixed(1) }
-      : candle.low  <= sl ? { win: false, pnl: (sl - entry) * pv * ct, exit: sl,  r: -1 }
-      : null
-      : candle.low  <= tp ? { win: true,  pnl: (entry - tp) * pv * ct, exit: tp,  r: +(Math.abs(entry - tp) / Math.abs(sl - entry)).toFixed(1) }
-      : candle.high >= sl ? { win: false, pnl: (entry - sl) * pv * ct, exit: sl,  r: -1 }
-      : null
-    if (hit) {
-      const tradeId = crypto.randomUUID()
-      lastTradeIdRef.current = tradeId
-      setPendingGrade(null)
-      setOrderResult(hit)
-      addPaperTrade({
-        id: tradeId,
-        symbol, side, entry, tp, sl,
-        exit: hit.exit,
-        pnl: hit.pnl, r: hit.r,
-        contracts: ct,
-        closePrice: hit.exit,
-        status: 'closed',
-        date: new Date().toISOString(),
-        accountType: accountMode,
-      })
-      setActiveOrder(null)
-      setPlaying(false)
-    }
-  }
+  const { checkFill, checkTPSL } = useOrderFills({
+    symbol, pointValueFn: pointValue, accountMode, activeOrder, awaitingFill,
+    setActiveOrder, setAwaitingFill, setOrderResult, setPendingGrade,
+    addPaperTrade, lastTradeIdRef, setPlaying
+  })
 
   // ── Replay: check fill + TP/SL on each bar advance ───────────────────────
   // Only fire when replayIndex changes (a new bar is revealed), NOT when the
@@ -416,7 +366,7 @@ export default function PracticePage() {
     const risk = Math.abs(activeOrder.entry - activeOrder.sl)
     const r    = risk > 0 ? +(Math.abs(exitPrice - activeOrder.entry) / risk).toFixed(1) : 0
 
-    const tradeId = crypto.randomUUID()
+    const tradeId = crypto.randomUUID?.() || Math.random().toString(36).slice(2)
     lastTradeIdRef.current = tradeId
     setPendingGrade(null)
     addPaperTrade({
@@ -720,7 +670,33 @@ export default function PracticePage() {
             </div>
           )}
 
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            {/* Chart overlay account pill */}
+            <div style={{
+              position: 'absolute', top: '12px', left: '12px', zIndex: 10,
+              background: 'rgba(16,24,40,0.85)', backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px',
+              padding: '6px 12px', display: 'flex', gap: '12px',
+              fontSize: '11px', fontFamily: 'monospace', fontWeight: 700,
+              color: 'var(--text)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              pointerEvents: 'none',
+            }}>
+              <span>{activeNamedAccount?.name ?? 'Account'}</span>
+              <span style={{ color: 'var(--muted)' }}>|</span>
+              <span>{fmt$(displayBalance)}</span>
+              <span style={{ color: 'var(--muted)' }}>|</span>
+              <span style={{ color: displayPnL >= 0 ? '#4ade80' : '#f87171' }}>
+                {displayPnL > 0 ? '+' : ''}{fmt$(displayPnL, true)}
+              </span>
+              {(accountMode === 'prop' && Math.max(0, DAILY_LOSS_LIMIT + dailyTotalPnL) < 500) && (
+                <>
+                  <span style={{ color: 'var(--muted)' }}>|</span>
+                  <span style={{ color: '#f59e0b' }}>
+                    DD Limit: {fmt$(Math.max(0, DAILY_LOSS_LIMIT + dailyTotalPnL))}
+                  </span>
+                </>
+              )}
+            </div>
             <ChartContainer
               candles={candles}
               dataKey={symbol + '-' + timeframe}
@@ -743,22 +719,39 @@ export default function PracticePage() {
               magnetEnabled={magnetEnabled}
               onDrawingDone={() => setDrawingTool(null)}
             />
-          </div>
 
-          {replayMode && (
-            <ReplayControls
-              total={candles.length}
-              index={replayIndex}
-              playing={playing}
-              speed={speed}
-              candles={candles}
-              onToggle={() => setPlaying(p => !p)}
-              onStep={step}
-              onReset={() => { setReplayIndex(1); setPlaying(false); setActiveOrder(null); setAwaitingFill(null); setOrderResult(null) }}
-              onSpeedChange={setSpeed}
-              onSeek={setReplayIndex}
-            />
-          )}
+            {replayMode && (
+              <div style={{
+                position: 'absolute',
+                bottom: 24,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 20,
+                background: 'rgba(12,14,22,0.92)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                borderRadius: 40,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                padding: '0 8px',
+                maxWidth: 'calc(100% - 32px)',
+                overflow: 'hidden',
+              }}>
+                <ReplayControls
+                  total={candles.length}
+                  index={replayIndex}
+                  playing={playing}
+                  speed={speed}
+                  candles={candles}
+                  timeframe={timeframe}
+                  onToggle={() => setPlaying(p => !p)}
+                  onStep={step}
+                  onReset={() => { setReplayIndex(1); setPlaying(false); setActiveOrder(null); setAwaitingFill(null); setOrderResult(null) }}
+                  onSpeedChange={setSpeed}
+                  onSeek={setReplayIndex}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Side panel */}
@@ -1147,15 +1140,18 @@ export default function PracticePage() {
             const sideColor = activeOrder.side === 'LONG' ? '#4ade80' : '#f87171'
             const tpPts = +(activeOrder.tp - activeOrder.entry).toFixed(2)
             const slPts = +(activeOrder.sl - activeOrder.entry).toFixed(2)
+            const distToSL = livePrice != null ? Math.abs(livePrice - activeOrder.sl) : 999
+            const inDanger = distToSL <= 5
             return (
               <div ref={activeTradeRef} style={{
                 margin: '10px',
                 border: `1px solid ${activeOrder.side === 'LONG' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
                 borderLeft: `3px solid ${sideColor}`,
                 borderRadius: '6px',
-                background: activeOrder.side === 'LONG' ? 'rgba(22,163,74,0.04)' : 'rgba(220,38,38,0.04)',
+                background: inDanger ? 'rgba(239, 68, 68, 0.15)' : (activeOrder.side === 'LONG' ? 'rgba(22,163,74,0.04)' : 'rgba(220,38,38,0.04)'),
                 overflow: 'hidden',
-                animation: 'fadeIn 0.3s ease-out',
+                animation: inDanger ? 'pulseDanger 1.5s infinite' : 'fadeIn 0.3s ease-out',
+                transition: 'background 0.3s ease-out',
               }}>
                 {/* Header: side + entry + unrealized */}
                 <div style={{

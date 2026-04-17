@@ -112,12 +112,19 @@ export default function WatchlistPanel({ activeSymbol, onSelectSymbol, collapsed
         )}
       </div>
 
-      {/* Ticker rows */}
-      {watchlist.length === 0 && (
-        <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', padding: '8px 0' }}>
-          No tickers — search above to add
+      {/* Ticker rows — compact 28px design */}
+      {watchlist.length === 0 ? (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          padding: '16px 8px', gap: 6,
+        }}>
+          <span style={{ fontSize: 20 }}>📋</span>
+          <span style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center' }}>
+            No symbols yet<br />
+            <span style={{ opacity: 0.6 }}>Search above to add ES, NQ…</span>
+          </span>
         </div>
-      )}
+      ) : null}
 
       {watchlist.map(sym => {
         const info    = prices[sym]
@@ -130,42 +137,44 @@ export default function WatchlistPanel({ activeSymbol, onSelectSymbol, collapsed
             key={sym}
             onClick={() => onSelectSymbol(sym)}
             style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '5px 8px', borderRadius: 5, cursor: 'pointer', marginBottom: 2,
+              display: 'flex', alignItems: 'center',
+              height: 28, paddingLeft: 8, paddingRight: 4,
+              borderRadius: 4, cursor: 'pointer', marginBottom: 1,
               background: active ? 'rgba(79,142,247,0.12)' : 'transparent',
               border: active ? '1px solid rgba(79,142,247,0.25)' : '1px solid transparent',
               transition: 'background 0.1s',
             }}
             onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-            onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+            onMouseLeave={e => { if (!active) e.currentTarget.style.background = active ? 'rgba(79,142,247,0.12)' : 'transparent' }}
           >
-            {/* Left: symbol name */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: active ? '#4f8ef7' : 'var(--text)', fontFamily: 'Inter, sans-serif' }}>
-                {displaySym(sym)}
-              </div>
-              {sym !== displaySym(sym) && (
-                <div style={{ fontSize: 9, color: 'var(--muted)', fontFamily: 'monospace' }}>{sym}</div>
-              )}
-            </div>
+            {/* Symbol */}
+            <span style={{
+              fontWeight: 700, fontSize: 11, color: active ? '#4f8ef7' : 'var(--text)',
+              fontFamily: 'Inter, sans-serif', flex: 1, minWidth: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {displaySym(sym)}
+            </span>
 
-            {/* Right: price + change */}
-            <div style={{ textAlign: 'right', marginRight: 6 }}>
-              {info ? (
-                <>
-                  <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11, color: 'var(--text)' }}>
-                    {info.price < 100 ? info.price.toFixed(2) : info.price.toFixed(info.price >= 1000 ? 1 : 2)}
-                  </div>
-                  <div style={{ fontSize: 9, color: pctColor, fontWeight: 600 }}>
-                    {isUp ? '+' : ''}{info.changePct.toFixed(2)}%
-                  </div>
-                </>
-              ) : (
-                <div style={{ fontSize: 9, color: 'var(--muted)' }}>–</div>
-              )}
-            </div>
+            {/* Last price */}
+            <span style={{
+              fontFamily: 'monospace', fontWeight: 600, fontSize: 11,
+              color: 'var(--text)', marginRight: 6, minWidth: 52, textAlign: 'right',
+            }}>
+              {info ? (info.price >= 1000 ? info.price.toFixed(1) : info.price.toFixed(2)) : '–'}
+            </span>
 
-            {/* Remove button */}
+            {/* Change % badge */}
+            <span style={{
+              fontSize: 9, fontWeight: 700, color: pctColor,
+              background: pctColor === 'var(--muted)' ? 'rgba(255,255,255,0.05)' : (isUp ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)'),
+              padding: '1px 5px', borderRadius: 3, minWidth: 38, textAlign: 'center',
+              border: `1px solid ${pctColor === 'var(--muted)' ? 'transparent' : (isUp ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)')}`,
+            }}>
+              {info ? `${isUp ? '+' : ''}${info.changePct.toFixed(2)}%` : '—'}
+            </span>
+
+            {/* Remove */}
             <button
               onClick={e => { e.stopPropagation(); removeFromWatchlist(sym) }}
               style={{
@@ -173,9 +182,11 @@ export default function WatchlistPanel({ activeSymbol, onSelectSymbol, collapsed
                 background: 'none', border: 'none',
                 color: 'var(--muted)', cursor: 'pointer', fontSize: 12,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: 0, lineHeight: 1, flexShrink: 0,
+                padding: 0, lineHeight: 1, flexShrink: 0, marginLeft: 2, opacity: 0,
               }}
               title="Remove"
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#f87171' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.color = 'var(--muted)' }}
             >×</button>
           </div>
         )

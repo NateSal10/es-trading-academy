@@ -7,6 +7,19 @@ import {
   cancelAllTimers,
 } from './sync'
 
+// Helper: cap dailyPnL map to the last `maxDays` days (default 90).
+// Shape: Record<string, number> keyed by 'YYYY-MM-DD' (matches Supabase accounts.daily_pnl JSONB).
+// Idempotent — safe to call on already-pruned data or on {}.
+function pruneDailyPnL(dailyPnL, maxDays = 90) {
+  if (!dailyPnL || typeof dailyPnL !== 'object') return {}
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - maxDays)
+  const cutoffStr = cutoff.toISOString().slice(0, 10) // YYYY-MM-DD
+  return Object.fromEntries(
+    Object.entries(dailyPnL).filter(([dateKey]) => dateKey >= cutoffStr)
+  )
+}
+
 // Helper: downsample equity curve to maxPoints for storage
 function downsampleCurve(curve, maxPoints) {
   if (!curve || curve.length <= maxPoints) return curve
@@ -101,7 +114,7 @@ const useStore = create(
       // ─── QUIZ ──────────────────────────────────────────────────────
       quizHistory: [],
       saveQuizResult: (result) => {
-        const entry = { ...result, id: crypto.randomUUID(), date: new Date().toISOString() }
+        const entry = { ...result, id: crypto.randomUUID?.() || Math.random().toString(36).slice(2), date: new Date().toISOString() }
         set(s => ({ quizHistory: [...s.quizHistory, entry] }))
         const s = get()
         if (s._userId) syncQuizResult(s._userId, entry)
@@ -110,7 +123,7 @@ const useStore = create(
       // ─── JOURNAL ───────────────────────────────────────────────────
       journal: [],
       addTrade: (trade) => {
-        const newTrade = { ...trade, id: crypto.randomUUID() }
+        const newTrade = { ...trade, id: crypto.randomUUID?.() || Math.random().toString(36).slice(2) }
         set(s => ({ journal: [...s.journal, newTrade] }))
         const s = get()
         if (s._userId) syncJournalAdd(s._userId, newTrade)
@@ -173,7 +186,7 @@ const useStore = create(
               ...s.account,
               balance: newBalance,
               peakBalance: newPeak,
-              dailyPnL: { ...s.account.dailyPnL, [date]: prev + delta },
+              dailyPnL: pruneDailyPnL({ ...s.account.dailyPnL, [date]: prev + delta }),
             },
           }
         })
@@ -258,7 +271,7 @@ const useStore = create(
       backtestHistory: [],
       saveBacktestResult: (result) => {
         const entry = {
-          id: crypto.randomUUID(),
+          id: crypto.randomUUID?.() || Math.random().toString(36).slice(2),
           date: new Date().toISOString(),
           strategyId: result.strategyId,
           strategyName: result.strategyName,
@@ -326,7 +339,7 @@ const useStore = create(
       activeAccountId: 'default-prop',
       createNamedAccount: (name, type, startingBalance) => set(s => ({
         namedAccounts: [...s.namedAccounts, {
-          id: crypto.randomUUID(), name, type,
+          id: crypto.randomUUID?.() || Math.random().toString(36).slice(2), name, type,
           startingBalance, balance: startingBalance,
           peakBalance: startingBalance, dailyPnL: {},
         }],
@@ -351,7 +364,7 @@ const useStore = create(
         return {
           namedAccounts: s.namedAccounts.map(a => a.id === id ? {
             ...a, balance: newBalance, peakBalance: newPeak,
-            dailyPnL: { ...a.dailyPnL, [date]: prev + pnl },
+            dailyPnL: pruneDailyPnL({ ...a.dailyPnL, [date]: prev + pnl }),
           } : a),
         }
       }),
@@ -394,7 +407,7 @@ const useStore = create(
         const date = (trade.date ?? new Date().toISOString()).split('T')[0]
         set(s => {
           // Stamp accountId so the dashboard can filter per named account
-          const withId = { ...trade, id: trade.id ?? crypto.randomUUID(), accountId: s.activeAccountId }
+          const withId = { ...trade, id: trade.id ?? (crypto.randomUUID?.() || Math.random().toString(36).slice(2)), accountId: s.activeAccountId }
           // Update the named account P&L for the active account
           const activeAcc = s.namedAccounts.find(a => a.id === s.activeAccountId)
           const updatedNamed = activeAcc ? s.namedAccounts.map(a => {
@@ -402,7 +415,7 @@ const useStore = create(
             const newBal  = a.balance + trade.pnl
             const newPeak = Math.max(a.peakBalance, newBal)
             const prev    = a.dailyPnL[date] || 0
-            return { ...a, balance: newBal, peakBalance: newPeak, dailyPnL: { ...a.dailyPnL, [date]: prev + trade.pnl } }
+            return { ...a, balance: newBal, peakBalance: newPeak, dailyPnL: pruneDailyPnL({ ...a.dailyPnL, [date]: prev + trade.pnl }) }
           }) : s.namedAccounts
 
           if (trade.accountType === 'prop') {
@@ -415,7 +428,7 @@ const useStore = create(
                 ...s.account,
                 balance: newBal,
                 peakBalance: newPeak,
-                dailyPnL: { ...s.account.dailyPnL, [date]: prevDay + trade.pnl },
+                dailyPnL: pruneDailyPnL({ ...s.account.dailyPnL, [date]: prevDay + trade.pnl }),
               },
               paperAccount: {
                 ...s.paperAccount,

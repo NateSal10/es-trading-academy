@@ -114,12 +114,23 @@ function buildUrl(symbol, interval, range) {
 }
 
 async function fetchCandles(symbol, interval, range, aggregate) {
-  const r    = await fetch(buildUrl(symbol, interval, range))
-  const data = await r.json()
-  let candles = parseYahooResponse(data)
-  if (!candles || candles.length <= 10) return null
-  if (aggregate) candles = aggregateCandles(candles, aggregate)
-  return candles
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 5000)
+  try {
+    const r = await fetch(buildUrl(symbol, interval, range), { signal: controller.signal })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const data = await r.json()
+    let candles = parseYahooResponse(data)
+    if (!candles || candles.length <= 10) return null
+    if (aggregate) candles = aggregateCandles(candles, aggregate)
+    return candles
+  } catch (err) {
+    if (err && err.name === 'AbortError') console.warn('[useChartData] fetch timeout (5s)')
+    else console.warn('[useChartData] fetch failed:', err && err.message)
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export function useChartData(symbol = 'ES=F', tf = '5m') {

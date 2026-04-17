@@ -13,7 +13,7 @@ function newCondition(type = 'ema_cross') {
     zone_time:   { startTime: '08:00', endTime: '08:15' },
     zone_manual: { high: '', low: '' },
   }
-  return { id: crypto.randomUUID(), type, connector: 'AND', ...defaults[type] }
+  return { id: crypto.randomUUID?.() || Math.random().toString(36).slice(2), type, connector: 'AND', ...defaults[type] }
 }
 
 export const DEFAULT_RULE_CONFIG = {

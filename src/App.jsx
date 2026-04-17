@@ -10,6 +10,8 @@ import MigrationPrompt from './components/auth/MigrationPrompt';
 import { useAuth } from './hooks/useAuth';
 import useStore from './store';
 import { hasLocalData } from './lib/migration';
+import CommandPalette from './components/common/CommandPalette';
+import { ToastProvider } from './components/common/ToastStack';
 
 export default function App() {
   const [tab, setTab] = useState('dashboard');
@@ -75,7 +77,8 @@ export default function App() {
   }
 
   return (
-    <>
+    <ToastProvider>
+      <CommandPalette onNavigate={setTab} />
       <Header signOut={signOut} userEmail={session.user.email} synced={hydrated} />
       <Nav active={tab} onSelect={setTab} />
       {tab === 'dashboard'   && <DashboardPage />}
@@ -84,6 +87,6 @@ export default function App() {
         <PracticePage />
       </div>
       {tab === 'backtest'    && <BacktestPage />}
-    </>
+    </ToastProvider>
   );
 }

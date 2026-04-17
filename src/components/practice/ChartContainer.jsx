@@ -9,6 +9,9 @@ import {
 import useStore from '../../store'
 import { DrawingLayerPrimitive } from './drawingPrimitives'
 import { detectFVGs, detectOBs, detectLiquidity } from '../../engine/smcDetectors'
+import { BoxZonePrimitive, VerticalBandPrimitive } from '../../lib/chart/primitives'
+import { SESSION_DEFS, buildSessionZones, calcSessionHL, buildKillZones } from '../../lib/chart/sessionUtils'
+import { toET, snapToOHLC, hitTestDrawing, applyDragPatch } from '../../lib/chart/drawingUtils'
 
 // ── RSI calculation (Wilder's smoothed method) ────────────────────────────────
 function calculateRSI(candles, period = 14) {
@@ -31,407 +34,6 @@ function calculateRSI(candles, period = 14) {
     results.push({ time: candles[i].time, value: avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss) })
   }
   return results
-}
-
-// Snap clicked price to the nearest OHLC value of the nearest candle (magnet mode)
-function snapToOHLC(candles, clickedTime, clickedPrice) {
-  if (!candles.length) return +clickedPrice.toFixed(2)
-  const nearest = candles.reduce((best, c) =>
-    Math.abs(c.time - clickedTime) < Math.abs(best.time - clickedTime) ? c : best
-  )
-  const ohlc = [nearest.open, nearest.high, nearest.low, nearest.close]
-  const snapped = ohlc.reduce((best, p) =>
-    Math.abs(p - clickedPrice) < Math.abs(best - clickedPrice) ? p : best
-  )
-  return +snapped.toFixed(2)
-}
-
-// ── Drawing hit-test helpers ───────────────────────────────────────────────────
-const HIT_PX = 10
-
-function dist2D(x1, y1, x2, y2) {
-  return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-}
-
-function segmentDist(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1, dy = y2 - y1
-  if (dx === 0 && dy === 0) return dist2D(px, py, x1, y1)
-  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
-  return dist2D(px, py, x1 + t * dx, y1 + t * dy)
-}
-
-// Returns hit mode string or null.
-// Modes: 'move' | 'p1' | 'p2' | 'corner-11' | 'corner-22' | 'corner-12' | 'corner-21'
-function hitTestDrawing(d, mx, my, cs, ts) {
-  if (d.type === 'hline') {
-    const y = cs.priceToCoordinate(d.price)
-    if (y == null) return null
-    return Math.abs(my - y) <= HIT_PX ? 'move' : null
-  }
-  if (d.type === 'line') {
-    const x1 = ts.timeToCoordinate(d.p1.time), y1 = cs.priceToCoordinate(d.p1.price)
-    const x2 = ts.timeToCoordinate(d.p2.time), y2 = cs.priceToCoordinate(d.p2.price)
-    if (x1 == null || y1 == null || x2 == null || y2 == null) return null
-    if (dist2D(mx, my, x1, y1) <= HIT_PX) return 'p1'
-    if (dist2D(mx, my, x2, y2) <= HIT_PX) return 'p2'
-    if (segmentDist(mx, my, x1, y1, x2, y2) <= HIT_PX) return 'move'
-    return null
-  }
-  if (d.type === 'box') {
-    const x1 = ts.timeToCoordinate(d.p1.time), y1 = cs.priceToCoordinate(d.p1.price)
-    const x2 = ts.timeToCoordinate(d.p2.time), y2 = cs.priceToCoordinate(d.p2.price)
-    if (x1 == null || y1 == null || x2 == null || y2 == null) return null
-    if (dist2D(mx, my, x1, y1) <= HIT_PX) return 'corner-11'
-    if (dist2D(mx, my, x2, y2) <= HIT_PX) return 'corner-22'
-    if (dist2D(mx, my, x1, y2) <= HIT_PX) return 'corner-12'
-    if (dist2D(mx, my, x2, y1) <= HIT_PX) return 'corner-21'
-    const left = Math.min(x1, x2), right = Math.max(x1, x2)
-    const top  = Math.min(y1, y2), bot   = Math.max(y1, y2)
-    if (mx >= left && mx <= right && my >= top && my <= bot) return 'move'
-    return null
-  }
-  return null
-}
-
-// Compute the drawing patch for a given drag mode + current mouse position
-function applyDragPatch(orig, mode, nx, ny, dxPx, dyPx, cs, ts) {
-  if (orig.type === 'hline') {
-    const p = cs.coordinateToPrice(ny)
-    return p != null ? { price: +p.toFixed(2) } : null
-  }
-  if (orig.type === 'line' || orig.type === 'box') {
-    if (mode === 'p1' || mode === 'corner-11') {
-      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
-      return (t && p != null) ? { p1: { time: t, price: +p.toFixed(2) } } : null
-    }
-    if (mode === 'p2' || mode === 'corner-22') {
-      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
-      return (t && p != null) ? { p2: { time: t, price: +p.toFixed(2) } } : null
-    }
-    if (mode === 'corner-12') {
-      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
-      return (t && p != null) ? { p1: { ...orig.p1, time: t }, p2: { ...orig.p2, price: +p.toFixed(2) } } : null
-    }
-    if (mode === 'corner-21') {
-      const t = ts.coordinateToTime(nx), p = cs.coordinateToPrice(ny)
-      return (t && p != null) ? { p2: { ...orig.p2, time: t }, p1: { ...orig.p1, price: +p.toFixed(2) } } : null
-    }
-    if (mode === 'move') {
-      const ox1 = ts.timeToCoordinate(orig.p1.time), oy1 = cs.priceToCoordinate(orig.p1.price)
-      const ox2 = ts.timeToCoordinate(orig.p2.time), oy2 = cs.priceToCoordinate(orig.p2.price)
-      if (ox1 == null || oy1 == null || ox2 == null || oy2 == null) return null
-      const t1 = ts.coordinateToTime(ox1 + dxPx), p1 = cs.coordinateToPrice(oy1 + dyPx)
-      const t2 = ts.coordinateToTime(ox2 + dxPx), p2 = cs.coordinateToPrice(oy2 + dyPx)
-      return (t1 && p1 != null && t2 && p2 != null)
-        ? { p1: { time: t1, price: +p1.toFixed(2) }, p2: { time: t2, price: +p2.toFixed(2) } }
-        : null
-    }
-  }
-  return null
-}
-
-// ── Box Zone Primitive (FVG & OB drawn as canvas rectangles) ─────────────────
-// Zones: { type: 'bull'|'bear', top, bot, startTime }
-
-class BoxZoneRenderer {
-  constructor(src) { this._src = src }
-
-  draw(target) {
-    const { _series: s, _chart: c, _zones: zones } = this._src
-    if (!s || !c || !zones.length) return
-
-    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      const ts = c.timeScale()
-      zones.forEach(z => {
-        const topY = s.priceToCoordinate(z.top)
-        const botY = s.priceToCoordinate(z.bot)
-        if (topY == null || botY == null) return
-
-        // X: start at formation candle; extend to right edge of chart
-        const rawStartX = ts.timeToCoordinate(z.startTime)
-        const startX = rawStartX != null ? Math.max(0, rawStartX) : 0
-        let endX = mediaSize.width + 4
-        if (z.endTime != null) {
-          const rawEndX = ts.timeToCoordinate(z.endTime)
-          if (rawEndX != null) endX = Math.min(endX, rawEndX)
-        }
-
-        const y = Math.min(topY, botY)
-        const h = Math.max(2, Math.abs(topY - botY))
-        const w = endX - startX
-        if (w <= 0) return
-
-        const isBull = z.type === 'bull'
-        const isOB   = !!z._ob
-        const isBR   = !!z._brStrategy
-        const fill   = isBR
-          ? 'rgba(250,204,21,0.06)'
-          : isOB
-            ? (isBull ? 'rgba(251,146,60,0.08)'  : 'rgba(167,139,250,0.08)')
-            : (isBull ? 'rgba(34,197,94,0.08)'   : 'rgba(239,68,68,0.08)')
-        const border = isBR
-          ? 'rgba(250,204,21,0.50)'
-          : isOB
-            ? (isBull ? 'rgba(251,146,60,0.55)'  : 'rgba(167,139,250,0.55)')
-            : (isBull ? 'rgba(34,197,94,0.45)'   : 'rgba(239,68,68,0.45)')
-
-        ctx.fillStyle = fill
-        ctx.fillRect(startX, y, w, h)
-
-        ctx.strokeStyle = border
-        ctx.lineWidth = 1
-        ctx.setLineDash([4, 3])
-        ctx.strokeRect(startX + 0.5, y + 0.5, w, h)
-        ctx.setLineDash([])
-
-        // Midpoint dashed line through box center
-        const midY = y + h / 2
-        ctx.strokeStyle = border
-        ctx.lineWidth = 1
-        ctx.setLineDash([6, 4])
-        ctx.beginPath()
-        ctx.moveTo(startX, midY)
-        ctx.lineTo(endX, midY)
-        ctx.stroke()
-        ctx.setLineDash([])
-
-        // Label inside the box
-        ctx.fillStyle = border
-        ctx.font = 'bold 9px Inter, sans-serif'
-        ctx.fillText(z.label ?? (isBull ? 'FVG↑' : 'FVG↓'), startX + 4, y + Math.min(11, h - 2))
-      })
-    })
-  }
-}
-
-class BoxZonePaneView {
-  constructor(src) { this._renderer = new BoxZoneRenderer(src) }
-  renderer() { return this._renderer }
-  zOrder()   { return 'bottom' }
-}
-
-class BoxZonePrimitive {
-  constructor() {
-    this._zones   = []
-    this._series  = null
-    this._chart   = null
-    this._request = null
-    this._views   = [new BoxZonePaneView(this)]
-  }
-  attached({ series, chart, requestUpdate }) {
-    this._series  = series
-    this._chart   = chart
-    this._request = requestUpdate
-  }
-  detached() { this._series = null; this._chart = null; this._request = null }
-  updateZones(zones) { this._zones = zones; this._request?.() }
-  paneViews()       { return this._views }
-  updateAllViews()  {}
-}
-
-// ── Session helpers ───────────────────────────────────────────────────────────
-const SESSION_DEFS = {
-  asia:   { startH: 0,  startM: 0,  endH: 7,  endM: 0,  color: 'rgba(30,100,210,0.10)',  labelColor: 'rgba(56,140,240,0.30)',  label: 'Asia'     },
-  london: { startH: 7,  startM: 0,  endH: 12, endM: 0,  color: 'rgba(120,80,200,0.10)',  labelColor: 'rgba(167,139,250,0.30)',  label: 'London'   },
-  ny:     { startH: 12, startM: 0,  endH: 21, endM: 0,  color: 'rgba(100,110,30,0.12)',  labelColor: 'rgba(170,180,40,0.28)',  label: 'New York' },
-}
-
-function buildSessionZones(candles, sessions) {
-  const active = Object.keys(SESSION_DEFS).filter(k => sessions[k])
-  if (!active.length || !candles.length) return []
-
-  // Unique UTC days present in candle data
-  const days = [...new Set(candles.map(c => {
-    const d = new Date(c.time * 1000)
-    return `${d.getUTCFullYear()},${d.getUTCMonth()},${d.getUTCDate()}`
-  }))]
-
-  const zones = []
-  days.forEach(dayStr => {
-    const [y, m, d] = dayStr.split(',').map(Number)
-    active.forEach(key => {
-      const def = SESSION_DEFS[key]
-      const windowStart = Math.floor(Date.UTC(y, m, d, def.startH, def.startM) / 1000)
-      const windowEnd   = Math.floor(Date.UTC(y, m, d, def.endH,   def.endM)   / 1000)
-
-      // Collect actual candles inside this session window
-      const sc = candles.filter(c => c.time >= windowStart && c.time <= windowEnd)
-      if (!sc.length) return
-
-      // Use real candle timestamps — timeToCoordinate always resolves these.
-      // Avoids null coords when the session boundary falls in a data gap
-      // (e.g. NY 21:00 UTC lands exactly on the CME maintenance break).
-      zones.push({
-        startTime:  sc[0].time,
-        endTime:    sc[sc.length - 1].time,
-        color:      def.color,
-        labelColor: def.labelColor,
-        label:      def.label,
-        high:       Math.max(...sc.map(c => c.high)),
-        low:        Math.min(...sc.map(c => c.low)),
-      })
-    })
-  })
-  return zones
-}
-
-function calcSessionHL(candles, sessions) {
-  const hlActive = Object.keys(SESSION_DEFS).filter(k => sessions[k] && sessions[k + 'HL'])
-  if (!hlActive.length || !candles.length) return []
-
-  // Only last 2 days — beyond that the H/L lines get noisy
-  const days = [...new Set(candles.map(c => {
-    const d = new Date(c.time * 1000)
-    return `${d.getUTCFullYear()},${d.getUTCMonth()},${d.getUTCDate()}`
-  }))].slice(-2)
-
-  const levels = []
-  days.forEach(dayStr => {
-    const [y, m, d] = dayStr.split(',').map(Number)
-    hlActive.forEach(key => {
-      const def = SESSION_DEFS[key]
-      const startTs = Math.floor(Date.UTC(y, m, d, def.startH, def.startM) / 1000)
-      const endTs   = Math.floor(Date.UTC(y, m, d, def.endH,   def.endM)   / 1000)
-      const sc = candles.filter(c => c.time >= startTs && c.time < endTs)
-      if (!sc.length) return
-      levels.push({ price: Math.max(...sc.map(c => c.high)), color: def.labelColor, title: `${def.label} H` })
-      levels.push({ price: Math.min(...sc.map(c => c.low)),  color: def.labelColor, title: `${def.label} L` })
-    })
-  })
-  return levels
-}
-
-// ── Vertical Band Primitive (session backgrounds) ─────────────────────────────
-class VerticalBandRenderer {
-  constructor(src) { this._src = src }
-
-  draw(target) {
-    const { _series: s, _chart: c, _zones: zones } = this._src
-    if (!c || !zones.length) return
-
-    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      const ts = c.timeScale()
-      zones.forEach(z => {
-        const x1 = ts.timeToCoordinate(z.startTime)
-        const x2 = ts.timeToCoordinate(z.endTime)
-        if (x1 == null || x2 == null) return
-
-        const left  = Math.max(0, x1)
-        const right = Math.min(mediaSize.width, x2)
-        const w = right - left
-        if (w <= 0) return
-
-        // Clip to session high/low price range if available
-        let topY = 0
-        let botY = mediaSize.height
-        if (s && z.high != null && z.low != null) {
-          const computedTop = s.priceToCoordinate(z.high)
-          const computedBot = s.priceToCoordinate(z.low)
-          if (computedTop != null && computedBot != null) {
-            topY = Math.min(computedTop, computedBot)
-            botY = Math.max(computedTop, computedBot)
-          }
-        }
-        const bandH = botY - topY
-
-        ctx.fillStyle = z.color
-        ctx.fillRect(left, topY, w, bandH)
-
-        // Large centered watermark label
-        ctx.fillStyle = z.labelColor
-        ctx.font = 'bold 42px Inter, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(z.label, left + w / 2, topY + bandH * 0.5)
-        ctx.textAlign = 'left'
-        ctx.textBaseline = 'alphabetic'
-      })
-    })
-  }
-}
-
-class VerticalBandPaneView {
-  constructor(src) { this._renderer = new VerticalBandRenderer(src) }
-  renderer() { return this._renderer }
-  zOrder()   { return 'bottom' }
-}
-
-class VerticalBandPrimitive {
-  constructor() {
-    this._zones  = []
-    this._series = null
-    this._chart  = null
-    this._request = null
-    this._views  = [new VerticalBandPaneView(this)]
-  }
-  attached({ series, chart, requestUpdate }) { this._series = series; this._chart = chart; this._request = requestUpdate }
-  detached() { this._series = null; this._chart = null; this._request = null }
-  updateZones(zones) { this._zones = zones; this._request?.() }
-  paneViews()      { return this._views }
-  updateAllViews() {}
-}
-
-// ── ICT Kill Zone definitions (UTC hours) ────────────────────────────────────
-const KILL_ZONE_DEFS = [
-  { label: 'London Open',  startH: 7,  startM: 0,  endH: 10, endM: 0,  color: 'rgba(56,140,240,0.09)',  labelColor: 'rgba(56,140,240,0.22)' },
-  { label: 'NY Open',      startH: 14, startM: 30, endH: 16, endM: 0,  color: 'rgba(34,197,94,0.09)',   labelColor: 'rgba(34,197,94,0.22)' },
-  { label: 'NY Lunch',     startH: 17, startM: 0,  endH: 18, endM: 0,  color: 'rgba(245,158,11,0.09)',  labelColor: 'rgba(245,158,11,0.22)' },
-  { label: 'NY Close',     startH: 20, startM: 0,  endH: 21, endM: 0,  color: 'rgba(239,68,68,0.09)',   labelColor: 'rgba(239,68,68,0.22)' },
-]
-
-function buildKillZones(candles) {
-  if (!candles.length) return []
-  const days = [...new Set(candles.map(c => {
-    const d = new Date(c.time * 1000)
-    return `${d.getUTCFullYear()},${d.getUTCMonth()},${d.getUTCDate()}`
-  }))]
-  const zones = []
-  days.forEach(dayStr => {
-    const [y, m, d] = dayStr.split(',').map(Number)
-    KILL_ZONE_DEFS.forEach(def => {
-      const windowStart = Math.floor(Date.UTC(y, m, d, def.startH, def.startM) / 1000)
-      const windowEnd   = Math.floor(Date.UTC(y, m, d, def.endH,   def.endM)   / 1000)
-      const sc = candles.filter(c => c.time >= windowStart && c.time <= windowEnd)
-      if (!sc.length) return
-      zones.push({
-        startTime:  sc[0].time,
-        endTime:    sc[sc.length - 1].time,
-        color:      def.color,
-        labelColor: def.labelColor,
-        label:      def.label,
-      })
-    })
-  })
-  return zones
-}
-
-// ── Chart theme ───────────────────────────────────────────────────────────────
-// Convert any LWC time value (Unix seconds OR BusinessDay {year,month,day}) to ET string.
-// Returns a non-empty string in all cases — LWC hides tick labels if the formatter returns ''.
-function toET(ts, opts) {
-  try {
-    const ms = typeof ts === 'number'
-      ? ts * 1000
-      : (ts?.year != null ? Date.UTC(ts.year, ts.month - 1, ts.day) : new Date(ts).valueOf())
-    const s = new Date(ms).toLocaleString('en-US', { timeZone: 'America/New_York', ...opts })
-    if (s && s !== 'Invalid Date') return s
-  } catch { /* fall through */ }
-  // Safe UTC fallback — always produces a non-empty label
-  try {
-    const ms = typeof ts === 'number' ? ts * 1000 : Date.now()
-    const d = new Date(ms)
-    if (opts.hour !== undefined) {
-      const h = d.getUTCHours(), m = d.getUTCMinutes()
-      const ampm = h >= 12 ? 'PM' : 'AM'
-      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
-    }
-    if (opts.month !== undefined && opts.day !== undefined) {
-      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-      return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`
-    }
-    if (opts.month !== undefined) return `${d.getUTCFullYear()}`
-    return `${d.getUTCFullYear()}`
-  } catch { return '–' }
 }
 
 const CHART_OPTIONS = {
@@ -533,6 +135,13 @@ export default function ChartContainer({
   const sessions   = useStore(s => s.sessions)
   const indicators = useStore(s => s.indicators)
 
+  // ── Account pill data (balance / today PnL / drawdown room) ───────────────
+  const balance          = useStore(s => s.paperAccount.balance)
+  const startingBalance  = useStore(s => s.paperAccount.starting_balance ?? s.paperAccount.startingBalance ?? 50000)
+  const todayPnL         = 0 // TODO: wire up from store.account.dailyPnL
+  const maxDrawdown      = 2000
+  const ddRoom           = Math.max(0, maxDrawdown - (startingBalance - balance))
+
   const visibleCandles = useMemo(
     () => (replayIndex > 0 ? candles.slice(0, replayIndex) : candles),
     [candles, replayIndex]
@@ -583,6 +192,9 @@ export default function ChartContainer({
     })
     ro.observe(mainElRef.current)
 
+    let mainRangeHandler = null
+    let rsiRangeHandler  = null
+
     // ── RSI sub-chart ────────────────────────────────────────────────────────
     if (rsiElRef.current) {
       const rsiChart = createChart(rsiElRef.current, {
@@ -632,24 +244,26 @@ export default function ChartContainer({
 
       // Bidirectional time scale sync (main ↔ RSI)
       let syncingRange = false
-      chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      mainRangeHandler = (range) => {
         if (syncingRange || !range) return
         syncingRange = true
         rsiChart.timeScale().setVisibleLogicalRange(range)
         syncingRange = false
-      })
-      rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      }
+      rsiRangeHandler = (range) => {
         if (syncingRange || !range) return
         syncingRange = true
         chart.timeScale().setVisibleLogicalRange(range)
         syncingRange = false
-      })
+      }
+      const unsubMain = chart.timeScale().subscribeVisibleLogicalRangeChange(mainRangeHandler)
+      const unsubRsi = rsiChart.timeScale().subscribeVisibleLogicalRangeChange(rsiRangeHandler)
 
       ro.observe(rsiElRef.current)
     }
 
     // Crosshair time tooltip (TradingView-style)
-    chart.subscribeCrosshairMove((param) => {
+    const crosshairHandler = (param) => {
       if (!param.point || !param.time) {
         setCrosshairTime(null)
         return
@@ -659,10 +273,19 @@ export default function ChartContainer({
         hour: 'numeric', minute: '2-digit', hour12: true,
       })
       setCrosshairTime({ x: param.point.x, label })
-    })
+    }
+    const unsubCrosshair = chart.subscribeCrosshairMove(crosshairHandler)
 
     return () => {
       ro.disconnect()
+      if (typeof unsubCrosshair === 'function') unsubCrosshair()
+      else chart.unsubscribeCrosshairMove(crosshairHandler)
+      if (typeof unsubMain === 'function') unsubMain()
+      else if (mainRangeHandler) chart.timeScale().unsubscribeVisibleLogicalRangeChange(mainRangeHandler)
+      if (rsiRangeHandler && rsiChartRef.current) {
+        if (typeof unsubRsi === 'function') unsubRsi()
+        else rsiChartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(rsiRangeHandler)
+      }
       chart.remove()
       rsiChartRef.current?.remove()
       rsiChartRef.current  = null
@@ -690,7 +313,7 @@ export default function ChartContainer({
         const snappedTime = param.time
 
         if (drawingTool === 'hline') {
-          addDrawingRef.current?.({ id: crypto.randomUUID(), type: 'hline', price: snappedPrice, color: '#4f8ef7' })
+          addDrawingRef.current?.({ id: crypto.randomUUID?.() || Math.random().toString(36).slice(2), type: 'hline', price: snappedPrice, color: '#4f8ef7' })
           onDrawingDoneRef.current?.()
         } else {
           // line or box: need two clicks
@@ -698,7 +321,7 @@ export default function ChartContainer({
             drawStartRef.current = { time: snappedTime, price: snappedPrice }
           } else {
             addDrawingRef.current?.({
-              id: crypto.randomUUID(),
+              id: crypto.randomUUID?.() || Math.random().toString(36).slice(2),
               type: drawingTool,
               p1: drawStartRef.current,
               p2: { time: snappedTime, price: snappedPrice },
@@ -1240,44 +863,48 @@ export default function ChartContainer({
   // ── SMC overlays ─────────────────────────────────────────────────────────────
   // FVG and OB use canvas box primitives (start at formation candle, extend right).
   // Liquidity uses price lines (single price level, no start/end concept).
+  const fvgZones = useMemo(
+    () => smcLayers.fvg
+      ? detectFVGs(visibleCandles).map(z => ({ ...z, label: z.type === 'bull' ? 'FVG↑' : 'FVG↓' }))
+      : [],
+    [visibleCandles, smcLayers.fvg]
+  )
+  const obZones = useMemo(
+    () => smcLayers.ob
+      ? detectOBs(visibleCandles).map(ob => ({
+          type: ob.type,
+          top: ob.high, bot: ob.low,
+          startTime: ob.startTime,
+          label: ob.type === 'bull' ? 'OB↑' : 'OB↓',
+          _bull: ob.type === 'bull',
+          _ob: true,
+        }))
+      : [],
+    [visibleCandles, smcLayers.ob]
+  )
+  const liqLevels = useMemo(
+    () => smcLayers.liq ? detectLiquidity(visibleCandles) : [],
+    [visibleCandles, smcLayers.liq]
+  )
+
   useEffect(() => {
     const cs = seriesRef.current.candles
     if (!cs || !visibleCandles.length) return
 
     // ── FVG boxes ─────────────────────────────────────────────────────────────
-    fvgPrimRef.current?.updateZones(
-      smcLayers.fvg
-        ? detectFVGs(visibleCandles).map(z => ({ ...z, label: z.type === 'bull' ? 'FVG↑' : 'FVG↓' }))
-        : []
-    )
+    fvgPrimRef.current?.updateZones(fvgZones)
 
     // ── OB boxes (orange=bull, purple=bear) ───────────────────────────────────
-    if (smcLayers.ob) {
-      obPrimRef.current?.updateZones(
-        detectOBs(visibleCandles).map(ob => ({
-          type: ob.type,
-          top: ob.high, bot: ob.low,
-          startTime: ob.startTime,
-          label: ob.type === 'bull' ? 'OB↑' : 'OB↓',
-          // Override colors via a flag — renderer checks this
-          _bull: ob.type === 'bull',
-          _ob: true,
-        }))
-      )
-    } else {
-      obPrimRef.current?.updateZones([])
-    }
+    obPrimRef.current?.updateZones(obZones)
 
     // ── Liquidity price lines (sweep levels, no box needed) ───────────────────
     if (seriesRef.current._liqLines) {
       seriesRef.current._liqLines.forEach(l => { try { cs.removePriceLine(l) } catch {} })
     }
-    seriesRef.current._liqLines = smcLayers.liq
-      ? detectLiquidity(visibleCandles).map(lv =>
-          cs.createPriceLine({ price: lv.price, color: 'rgba(245,158,11,0.5)', lineWidth: 1, lineStyle: LineStyle.Dotted, title: lv.type === 'high' ? 'BSL' : 'SSL', axisLabelVisible: false })
-        )
-      : []
-  }, [visibleCandles, smcLayers])
+    seriesRef.current._liqLines = liqLevels.map(lv =>
+      cs.createPriceLine({ price: lv.price, color: 'rgba(245,158,11,0.5)', lineWidth: 1, lineStyle: LineStyle.Dotted, title: lv.type === 'high' ? 'BSL' : 'SSL', axisLabelVisible: false })
+    )
+  }, [visibleCandles, fvgZones, obZones, liqLevels])
 
   // ── Session bands + H/L ──────────────────────────────────────────────────────
   useEffect(() => {

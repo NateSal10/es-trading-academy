@@ -561,7 +561,7 @@ svg.chart{overflow:visible;width:100%;display:block}
 }
 .replay-btn:hover{border-color:var(--border2);color:var(--accent)}
 .replay-btn.active{background:var(--green-bg);border-color:var(--green-border);color:var(--green-bright)}
-.replay-progress{flex:1;height:3px;background:var(--border);border-radius:2px;cursor:pointer;position:relative}
+.replay-progress{flex:1;height:6px;background:var(--border);border-radius:3px;position:relative;pointer-events:none}
 .replay-progress-fill{height:100%;background:var(--accent);border-radius:2px;pointer-events:none}
 .speed-btn{
   padding:3px 7px;
@@ -1120,4 +1120,49 @@ svg.chart{overflow:visible;width:100%;display:block}
     -webkit-box-shadow: 0 0 0px 1000px rgba(255,255,255,0.05) inset;
     transition: background-color 5000s ease-in-out 0s;
   }
+}
+@keyframes pulseDanger {
+  0% { background: rgba(239, 68, 68, 0.04); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { background: rgba(239, 68, 68, 0.15); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+  100% { background: rgba(239, 68, 68, 0.04); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+@keyframes pulseDanger {
+  0% { background: rgba(239, 68, 68, 0.04); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { background: rgba(239, 68, 68, 0.15); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+  100% { background: rgba(239, 68, 68, 0.04); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+
+/* -- NumberTicker flash animations -- */
+.number-ticker {
+  transition: color 0.2s ease;
+  display: inline-block;
+}
+.number-ticker.flash-up {
+  animation: flashUp 0.5s ease-out;
+}
+.number-ticker.flash-down {
+  animation: flashDown 0.5s ease-out;
+}
+@keyframes flashUp {
+  0%   { color: #4ade80; transform: scale(1.08); }
+  100% { color: inherit;  transform: scale(1); }
+}
+@keyframes flashDown {
+  0%   { color: #f87171; transform: scale(1.08); }
+  100% { color: inherit;  transform: scale(1); }
+}
+
+/* -- Toast slide-in -- */
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* -- Global focus rings -- */
+:focus-visible {
+  outline: 2px solid var(--accent, #4f8ef7);
+  outline-offset: 2px;
+  border-radius: 3px;
 }

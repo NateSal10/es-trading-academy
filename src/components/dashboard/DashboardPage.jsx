@@ -79,42 +79,127 @@ function MeterBar({ label, used, limit, color }) {
 }
 
 function DrawdownMeter({ todayPnL, balance, peakBalance, startingBalance }) {
-  const dailyLoss = Math.min(0, todayPnL)
-  const ddFromPeak = Math.max(0, peakBalance - balance)
-  const profitGain = Math.max(0, balance - startingBalance)
+  const DAILY_LIMIT   = 1000
+  const MAX_DD_LIMIT  = 2000
   const PROFIT_TARGET = 3000
+
+  const dailyLossUsed = Math.min(0, todayPnL)         // negative
+  const ddUsed        = Math.max(0, peakBalance - balance)
+  const profitGain    = Math.max(0, balance - startingBalance)
+
+  const dailyPct  = Math.min(100, Math.round(Math.abs(dailyLossUsed) / DAILY_LIMIT * 100))
+  const ddPct     = Math.min(100, Math.round(ddUsed / MAX_DD_LIMIT * 100))
   const profitPct = Math.min(100, Math.round(profitGain / PROFIT_TARGET * 100))
-  const profitColor = profitPct >= 100 ? 'var(--green-bright)' : 'var(--accent)'
+
+  const isHot = dailyPct >= 80 || ddPct >= 80
+
+  const zones = [
+    {
+      label: 'Daily Loss',
+      used: Math.abs(dailyLossUsed),
+      limit: DAILY_LIMIT,
+      pct: dailyPct,
+      color: dailyPct >= 80 ? '#ef4444' : dailyPct >= 50 ? '#f59e0b' : '#22c55e',
+      tooltip: `Daily Loss: ${fmt$(Math.abs(dailyLossUsed))} / ${fmt$(DAILY_LIMIT)}`,
+    },
+    {
+      label: 'Max DD',
+      used: ddUsed,
+      limit: MAX_DD_LIMIT,
+      pct: ddPct,
+      color: ddPct >= 80 ? '#ef4444' : ddPct >= 50 ? '#f59e0b' : '#4f8ef7',
+      tooltip: `Max Drawdown: ${fmt$(ddUsed)} / ${fmt$(MAX_DD_LIMIT)}`,
+    },
+    {
+      label: 'Profit',
+      used: profitGain,
+      limit: PROFIT_TARGET,
+      pct: profitPct,
+      color: profitPct >= 100 ? '#22c55e' : '#a78bfa',
+      tooltip: `Profit Target: ${fmt$(profitGain, true)} / ${fmt$(PROFIT_TARGET)}`,
+      isProfit: true,
+    },
+  ]
 
   return (
     <div className="card" style={{ marginBottom: 0 }}>
-      <div style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '14px', fontWeight: 600 }}>
-        Prop Risk Limits
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: 600 }}>
+          Risk Limits
+        </span>
+        {isHot && (
+          <span style={{
+            fontSize: '10px', fontWeight: 700, color: '#ef4444',
+            background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)',
+            padding: '2px 8px', borderRadius: 4,
+            animation: 'pulseDanger 1.5s infinite',
+          }}>
+            ⚠ APPROACHING LIMIT
+          </span>
+        )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <MeterBar label="Daily Loss" used={dailyLoss} limit={1000} color="var(--green-bright)" />
-        <MeterBar label="Max Drawdown" used={ddFromPeak} limit={2000} color="var(--green-bright)" />
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-            <span style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.7px', fontSize: '10px', fontWeight: 600 }}>Profit Target</span>
-            <span style={{ fontFamily: 'monospace', color: profitColor, fontWeight: 700 }}>
-              {fmt$(profitGain, true)} / {fmt$(PROFIT_TARGET)}
-            </span>
-          </div>
-          <div style={{ height: '6px', background: 'var(--bg3)', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', width: `${profitPct}%`,
-              background: profitColor, borderRadius: '3px', transition: 'width 0.4s ease',
-            }} />
-          </div>
-          <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px', textAlign: 'right' }}>
-            {profitPct}% · {fmt$(PROFIT_TARGET - profitGain)} to go
-          </div>
+
+      {/* Single unified zoned bar */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{
+          height: 10, borderRadius: 5, background: 'var(--bg3)',
+          overflow: 'hidden', display: 'flex', gap: 2,
+        }}>
+          {zones.map(z => (
+            <div key={z.label} title={z.tooltip} style={{
+              flex: 1, height: '100%', position: 'relative',
+              background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden',
+            }}>
+              <div style={{
+                position: 'absolute', left: 0, top: 0, bottom: 0,
+                width: `${z.isProfit ? z.pct : z.pct}%`,
+                background: z.color,
+                transition: 'width 0.5s ease',
+                borderRadius: 3,
+              }} />
+            </div>
+          ))}
         </div>
+        {/* Zone labels below bar */}
+        <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+          {zones.map(z => (
+            <div key={z.label} style={{ flex: 1, fontSize: '10px', color: z.color, fontWeight: 600 }}>
+              {z.label}
+              <span style={{ color: 'var(--muted)', fontWeight: 400, marginLeft: 4 }}>{z.pct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Detail rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {zones.map(z => (
+          <div key={z.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: 3 }}>
+              <span style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.7px', fontSize: '10px', fontWeight: 600 }}>
+                {z.label}
+              </span>
+              <span style={{ fontFamily: 'monospace', color: z.color, fontWeight: 700 }}>
+                {z.isProfit ? fmt$(z.used, true) : fmt$(z.used)} / {fmt$(z.limit)}
+              </span>
+            </div>
+            <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', width: `${z.pct}%`,
+                background: z.color, borderRadius: 2,
+                transition: 'width 0.5s ease',
+              }} />
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: 2, textAlign: 'right' }}>
+              {z.pct}% · {z.isProfit ? `${fmt$(z.limit - z.used)} to target` : `${fmt$(z.limit - z.used)} remaining`}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
 }
+
 
 function EquityCurve({ dailyPnL, startingBalance }) {
   const dates = Object.keys(dailyPnL).sort()

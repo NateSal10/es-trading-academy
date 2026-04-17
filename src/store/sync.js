@@ -1,5 +1,9 @@
 import { supabase } from '../lib/supabase'
 
+// ─── Sync status (module-level, observable by UI) ───────────────────────────
+// Updated on error / success paths; UI may read directly or pass via props.
+export const syncState = { lastError: null, lastSuccessAt: null }
+
 // ─── Debounce helper ────────────────────────────────────────────────────────
 const settingsTimers = new Map()
 const DEBOUNCE_MS = 1000
@@ -222,9 +226,19 @@ export async function syncPaperAccount(userId, paperAccount) {
 // ─── INIT (create default rows for new user) ───────────────────────────────
 
 export async function initUserData(userId) {
-  await Promise.all([
+  const results = await Promise.allSettled([
     supabase.from('user_settings').upsert({ user_id: userId }),
     supabase.from('accounts').upsert({ user_id: userId }),
     supabase.from('paper_accounts').upsert({ user_id: userId }),
   ])
+  const failures = results.filter(r => r.status === 'rejected')
+  if (failures.length > 0) {
+    const reasons = failures.map(f => f.reason)
+    console.error('[initUserData] partial failure:', reasons)
+    const err = new Error(`initUserData failed for ${failures.length}/${results.length} tables`)
+    syncState.lastError = err
+    throw err
+  }
+  syncState.lastError = null
+  syncState.lastSuccessAt = new Date().toISOString()
 }
